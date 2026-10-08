@@ -71,6 +71,27 @@ def quarantined(conn: Conn, scope: str, item_sha256: str) -> bool:
     )
 
 
+def quarantine_reasons(conn: Conn, scope: str, items: Iterable[str]) -> dict[str, str]:
+    """Motivo da primeira quarentena de cada item (revision_id ou sha256)."""
+    rows = conn.execute(
+        """SELECT DISTINCT ON (item_sha256) item_sha256, reason FROM control.quarantine
+           WHERE stream_scope = %s AND item_sha256 = ANY(%s)
+           ORDER BY item_sha256, quarantine_id""",
+        (scope, list(items)),
+    )
+    return {item: reason for item, reason in rows}
+
+
+def preferred_ids_of(conn: Conn, scope: str, provider_ids: Iterable[str]) -> set[str]:
+    rows = conn.execute(
+        """SELECT DISTINCT e.preferred_id FROM quake.alias a
+           JOIN quake.earthquake e USING (stream_scope, earthquake_uid)
+           WHERE a.stream_scope = %s AND a.provider_id = ANY(%s)""",
+        (scope, list(provider_ids)),
+    )
+    return {r[0] for r in rows}
+
+
 def known_revisions(conn: Conn, scope: str, revision_ids: Iterable[str]) -> set[str]:
     rows = conn.execute(
         """SELECT revision_id FROM quake.event_revision
@@ -152,12 +173,9 @@ def _revision(row: tuple[Any, ...]) -> EventRevision:
 def apply_ingested(
     conn: Conn, scope: str, rev: EventRevision, result: Ingested, capture_id: int
 ) -> None:
-    """Grava o que o `ingest` decidiu. DUPLICATE não grava nada; conflitos vão à quarentena."""
-    if result.outcome is Outcome.DUPLICATE:
-        return
-    if result.outcome in (Outcome.CONFLICT, Outcome.ALIAS_CONFLICT):
-        detail = f" ids={sorted(result.conflict_ids)}" if result.conflict_ids else ""
-        quarantine(conn, scope, capture_id, f"{result.outcome}{detail}", rev.revision_id)
+    """Grava o que o `ingest` decidiu. DUPLICATE e conflitos não gravam nada aqui; a
+    quarentena dos conflitos fica com a projeção."""
+    if result.outcome in (Outcome.DUPLICATE, Outcome.CONFLICT, Outcome.ALIAS_CONFLICT):
         return
     assert result.uid is not None
     uid = result.uid
