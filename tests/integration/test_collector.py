@@ -440,7 +440,8 @@ def test_alias_conflict_is_reconsulted_once_not_every_minute(harness: Harness) -
     assert h.count("control.quarantine", "reason LIKE 'ALIAS_CONFLICT%%'") == 1
     reconsults = [u for u in h.usgs.urls() if "eventid=" in u]
     assert sorted(reconsults) == sorted(
-        f"{FDSN_QUERY_URL}?eventid={e}&includedeleted=true&format=geojson" for e in ("ak2", "x1")
+        f"{FDSN_QUERY_URL}?eventid={e}&includedeleted=true&format=geojson"
+        for e in ("ak2", "us1", "x1")
     )
 
 

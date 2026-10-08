@@ -78,16 +78,24 @@ def project_capture(conn: Conn, blobs: BlobStore, capture: Capture, now: datetim
             result = _project(conn, capture, blobs.get(capture.blob_path), now)
             _mark(conn, capture, "OK", now)
         return result
-    except psycopg.OperationalError:
-        raise  # banco fora do ar: a captura fica pendente e volta no próximo ciclo
     except Exception as exc:
+        if conn.broken or conn.closed:
+            raise  # banco fora do ar: a captura fica pendente e volta no próximo ciclo
         log.exception("captura %d em quarentena", capture.capture_id)
         with conn.transaction():
             store.quarantine(
-                conn, capture.scope, capture.capture_id, f"projection: {exc!r}", capture.sha256
-            )
+                conn, capture.scope, capture.capture_id, f"projection: {describe(exc)}",
+                capture.sha256,
+            )  # fmt: skip
             _mark(conn, capture, "QUARANTINED", now)
         return Projected(quarantined=1)
+
+
+def describe(exc: BaseException) -> str:
+    """Tipo do erro e, do PostgreSQL, o código e a frase principal: nunca o valor da linha."""
+    if isinstance(exc, psycopg.Error) and exc.diag.sqlstate:
+        return f"{type(exc).__name__} {exc.diag.sqlstate} {exc.diag.message_primary or ''}".strip()
+    return type(exc).__name__
 
 
 def _mark(conn: Conn, capture: Capture, status: str, now: datetime) -> None:
@@ -117,62 +125,113 @@ def _project(conn: Conn, capture: Capture, body: bytes, now: datetime) -> Projec
 
     doc = json.loads(body)
     features = doc["features"] if doc.get("type") == "FeatureCollection" else [doc]
+    items = [
+        revision_from_feature(f).revision_id if EVENT.is_valid(f) else feature_sha256(f)
+        for f in features
+    ]
+    # o feed repete quase tudo a cada minuto: só passa pelo domínio o que é novo. Um detail
+    # (Feature só) passa sempre: a revisão costuma ser a mesma do feed e os produtos, não
+    known = (
+        store.known_revisions(conn, capture.scope, items)
+        if doc.get("type") == "FeatureCollection"
+        else set()
+    )
+    prior = store.quarantine_reasons(conn, capture.scope, items)
     result = Projected()
-    known: set[str] = set()
-    if doc.get("type") == "FeatureCollection":
-        # o feed repete quase tudo a cada minuto: só passa pelo domínio o que é novo
-        valid = [revision_from_feature(f).revision_id for f in features if EVENT.is_valid(f)]
-        known = store.known_revisions(conn, capture.scope, valid)
-    for feature in features:
-        error = first_error(EVENT, feature)
-        if error:
-            store.quarantine(
-                conn, capture.scope, capture.capture_id, f"contract: {error}",
-                feature_sha256(feature),
-            )  # fmt: skip
-            result.quarantined += 1
+    retry = []
+    changed = False
+    for feature, item in zip(features, items, strict=True):
+        if item in known:
             continue
-        rev = revision_from_feature(feature)
-        if rev.revision_id in known:
-            continue
-        catalog = store.load_catalog(conn, capture.scope, rev)
-        _, ingested = ingest(catalog, rev, uuid4())
-        store.apply_ingested(conn, capture.scope, rev, ingested, capture.capture_id)
-        if ingested.outcome in (Outcome.CURRENT, Outcome.HISTORY):
-            result.new_revisions += 1
-        if ingested.outcome in (Outcome.CONFLICT, Outcome.ALIAS_CONFLICT):
-            result.quarantined += 1
-        live = capture.scope == "LIVE"
-        if live and ingested.outcome is Outcome.ALIAS_CONFLICT:
-            for event_id in sorted({rev.provider_event_id, *ingested.conflict_ids}):
-                store.request_fetch(conn, event_id, reconsult_url(event_id), "alias", now)
-        if ingested.uid is None:
-            continue
-        if "products" in feature["properties"]:
-            _store_products(conn, capture, ingested.uid, feature, result)
-        elif (
-            live
-            and ingested.outcome is Outcome.CURRENT
-            and "detail" in feature["properties"]
-            and ("shakemap" in rev.types or store.has_map(conn, capture.scope, ingested.uid))
-        ):
-            store.request_fetch(
-                conn, rev.provider_event_id, feature["properties"]["detail"], "updated", now
-            )
+        outcome = _project_feature(conn, capture, feature, item, prior, now, result)
+        changed |= outcome is Outcome.CURRENT
+        if outcome is Outcome.ALIAS_CONFLICT:
+            retry.append((feature, item))
+    # a revisão que solta o id disputado pode vir na mesma resposta, depois da que o pedia
+    if changed:
+        for feature, item in retry:
+            _project_feature(conn, capture, feature, item, prior, now, result)
     return result
 
 
-def _store_products(
-    conn: Conn, capture: Capture, uid: Any, detail: dict[str, Any], result: Projected
-) -> None:
+def _project_feature(
+    conn: Conn,
+    capture: Capture,
+    feature: Any,
+    item: str,
+    prior: dict[str, str],
+    now: datetime,
+    result: Projected,
+) -> Outcome | None:
+    """Uma feature num savepoint. Item que já está na quarentena não ganha linha nova.
+
+    Conflito de versão e erro não voltam ao domínio; conflito de alias volta, porque depende
+    dos conjuntos atuais de outros eventos, que mudam.
+    """
+    if item in prior and not prior[item].startswith(Outcome.ALIAS_CONFLICT):
+        return None
+    error = first_error(EVENT, feature)
+    outcome: Outcome | None = None
+    reason: str | None = f"contract: {error}" if error else None
+    if not error:
+        try:
+            with conn.transaction():
+                outcome, reason = _ingest_feature(conn, capture, feature, item in prior, now)
+        except Exception as exc:
+            if conn.broken or conn.closed:
+                raise
+            log.exception("feature %s em quarentena", item)
+            outcome, reason = None, f"projection: {describe(exc)}"
+    if outcome is Outcome.CURRENT or outcome is Outcome.HISTORY:
+        result.new_revisions += 1
+    if reason and item not in prior:
+        store.quarantine(conn, capture.scope, capture.capture_id, reason, item)
+        prior[item] = reason
+        result.quarantined += 1
+    return outcome
+
+
+def _ingest_feature(
+    conn: Conn, capture: Capture, feature: Any, seen_before: bool, now: datetime
+) -> tuple[Outcome, str | None]:
+    rev = revision_from_feature(feature)
+    catalog = store.load_catalog(conn, capture.scope, rev)
+    _, ingested = ingest(catalog, rev, uuid4())
+    store.apply_ingested(conn, capture.scope, rev, ingested, capture.capture_id)
+    live = capture.scope == "LIVE"
+    if ingested.outcome in (Outcome.CONFLICT, Outcome.ALIAS_CONFLICT):
+        ids = f" ids={sorted(ingested.conflict_ids)}" if ingested.conflict_ids else ""
+        if live and ingested.outcome is Outcome.ALIAS_CONFLICT and not seen_before:
+            # reconsulta uma vez: a revisão, os ids disputados e o preferido de quem os tem
+            owners = store.preferred_ids_of(conn, capture.scope, ingested.conflict_ids)
+            for event_id in sorted({rev.provider_event_id, *ingested.conflict_ids, *owners}):
+                store.request_fetch(conn, event_id, reconsult_url(event_id), "alias", now)
+        return ingested.outcome, f"{ingested.outcome}{ids}"
+    if ingested.uid is None:
+        return ingested.outcome, None
+    if "products" in feature["properties"]:
+        _store_products(conn, capture, ingested.uid, feature)
+    elif (
+        live
+        and ingested.outcome is Outcome.CURRENT
+        and "detail" in feature["properties"]
+        and ("shakemap" in rev.types or store.has_map(conn, capture.scope, ingested.uid))
+    ):
+        store.request_fetch(
+            conn, rev.provider_event_id, feature["properties"]["detail"], "updated", now
+        )
+    return ingested.outcome, None
+
+
+def _store_products(conn: Conn, capture: Capture, uid: Any, detail: dict[str, Any]) -> None:
     products = detail["properties"]["products"].get("shakemap", [])
     bad = [p for p in products if not SHAKEMAP.is_valid(p)]
     for p in bad:
-        store.quarantine(
-            conn, capture.scope, capture.capture_id, f"contract: {first_error(SHAKEMAP, p)}",
-            feature_sha256(p),
-        )  # fmt: skip
-        result.quarantined += 1
+        if not store.quarantined(conn, capture.scope, feature_sha256(p)):
+            store.quarantine(
+                conn, capture.scope, capture.capture_id, f"contract: {first_error(SHAKEMAP, p)}",
+                feature_sha256(p),
+            )  # fmt: skip
     if bad:
         detail = {
             **detail,

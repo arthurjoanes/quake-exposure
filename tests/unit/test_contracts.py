@@ -141,3 +141,17 @@ def test_exposure_result_contract() -> None:
             target = target[key]
         target[path[-1]] = bad
         assert errors(EXPOSURE_RESULT, doc) != [], path
+
+
+def test_first_error_names_the_rule_not_the_value(usgs_json: Callable[[str], Any]) -> None:
+    from quakeexposure.contracts import EVENT as LIVE_EVENT
+    from quakeexposure.contracts import first_error
+
+    event = copy.deepcopy(usgs_json("feed_all_day")["features"][0])
+    del event["properties"]["time"]
+    assert first_error(LIVE_EVENT, event) == "properties: required ['time']"
+    event = copy.deepcopy(usgs_json("feed_all_day")["features"][0])
+    event["properties"]["mag"] = "SEGREDO"
+    message = first_error(LIVE_EVENT, event)
+    assert message is not None and message.startswith("properties/mag:")
+    assert "SEGREDO" not in message

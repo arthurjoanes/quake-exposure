@@ -198,8 +198,8 @@ class Collector:
                     (str(exc)[:500], event_id),
                 )
                 return
-            reason = "not-allowed" if isinstance(exc, NotAllowed) else "rejected"
-            store.quarantine(self.conn, "LIVE", None, f"fetch {reason}: {exc}", _sha(url))
+            kind = "not-allowed" if isinstance(exc, NotAllowed) else "rejected"
+            store.quarantine(self.conn, "LIVE", None, f"fetch {kind}: {_reason(exc)}", _sha(url))
             self.conn.execute(
                 "DELETE FROM control.fetch_request WHERE provider_event_id = %s", (event_id,)
             )
@@ -230,8 +230,10 @@ class Collector:
                 if exc.transient:
                     continue  # tenta de novo no próximo ciclo
                 with self.conn.transaction():
-                    store.quarantine(self.conn, "LIVE", None, f"grid: {exc}", sha)
-                    store.store_grid(self.conn, "LIVE", product, status="REJECTED", reason=str(exc))
+                    store.quarantine(self.conn, "LIVE", None, f"grid: {_reason(exc)}", sha)
+                    store.store_grid(
+                        self.conn, "LIVE", product, status="REJECTED", reason=_reason(exc)
+                    )
                 continue
             self._store("grid", fetched, product=product)
             project_pending(self.conn, self.blobs, self.clock())
@@ -242,7 +244,11 @@ class Collector:
             doc = json.loads(fetched.body)
         except ValueError:
             doc = None
-        if not (isinstance(doc, dict) and doc.get("type") == "FeatureCollection"):
+        if not (
+            isinstance(doc, dict)
+            and doc.get("type") == "FeatureCollection"
+            and isinstance(doc.get("features"), list)
+        ):
             # 200 com corpo inútil conta como falha: o watermark e o cursor não avançam
             if not store.quarantined(self.conn, "LIVE", fetched.sha256):
                 with self.conn.transaction():
@@ -258,7 +264,7 @@ class Collector:
 
     def _has_news(self, doc: dict[str, Any]) -> bool:
         ids = []
-        for f in doc.get("features", []):
+        for f in doc["features"]:
             if EVENT.is_valid(f):
                 ids.append(revision_from_feature(f).revision_id)
             elif not store.quarantined(self.conn, "LIVE", feature_sha256(f)):
@@ -304,6 +310,13 @@ class Collector:
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _reason(exc: FetchError) -> str:
+    """Para a quarentena: sem o trecho do corpo que o HttpStatusError carrega."""
+    if isinstance(exc, HttpStatusError):
+        return f"{exc.url}: HTTP {exc.status}"
+    return str(exc)
 
 
 def run_forever(

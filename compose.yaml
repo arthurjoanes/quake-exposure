@@ -23,8 +23,13 @@ services:
     networks: [app, pipeline]
     restart: unless-stopped
     healthcheck:
-      # TCP: durante a inicialização o servidor temporário só escuta no socket local
-      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "qe"]
+      # TCP: durante a inicialização o servidor temporário só escuta no socket local.
+      # Exige o banco qe e o último papel do init: init pela metade não fica healthy.
+      test:
+        - CMD-SHELL
+        - >-
+          psql -h 127.0.0.1 -U postgres -d qe -tAc
+          "SELECT 1 FROM pg_roles WHERE rolname = 'qe_api_read'" | grep -q 1
       interval: 2s
       timeout: 3s
       retries: 60
