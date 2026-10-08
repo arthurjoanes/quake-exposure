@@ -33,6 +33,9 @@ TRANSIENT = (
     psycopg.errors.DeadlockDetected,
     psycopg.errors.SerializationFailure,
 )
+# classes de SQLSTATE do ambiente, não do dado: conexão (08), recursos como disco e memória
+# (53), operador (57) e sistema (58). 54 (limite do programa) fica de fora: é o dado
+TRANSIENT_CLASSES = {"08", "53", "57", "58"}
 
 
 def reconsult_url(event_id: str) -> str:
@@ -59,7 +62,8 @@ class Projected:
 def feature_sha256(feature: Any) -> str:
     # json.dumps aceita NaN: o hash do item não pode falhar no item que está quebrado
     text = json.dumps(feature, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    # surrogatepass: um "\udc80" solto vindo do JSON também tem hash
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
 
 
 def revision_of(feature: Any) -> EventRevision | None:
@@ -81,7 +85,9 @@ def item_of(feature: Any) -> str:
 
 
 def is_transient(conn: Conn, exc: BaseException) -> bool:
-    return conn.broken or conn.closed or isinstance(exc, TRANSIENT)
+    if conn.broken or conn.closed or isinstance(exc, TRANSIENT):
+        return True
+    return isinstance(exc, psycopg.Error) and (exc.sqlstate or "")[:2] in TRANSIENT_CLASSES
 
 
 def project_pending(conn: Conn, blobs: BlobStore, now: datetime) -> Projected:
@@ -263,8 +269,9 @@ def _ingest(
         and ("shakemap" in rev.types or store.has_map(conn, capture.scope, ingested.uid))
     ):
         store.request_fetch(
-            conn, rev.provider_event_id, feature["properties"]["detail"], "updated", now
-        )
+            conn, rev.provider_event_id, feature["properties"]["detail"], "updated", now,
+            min_updated=rev.source_updated_at,
+        )  # fmt: skip
     return ingested.outcome, None
 
 
