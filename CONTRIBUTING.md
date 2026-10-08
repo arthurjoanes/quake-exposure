@@ -30,26 +30,28 @@ Não há Makefile. Comando novo entra como `uv run qe ...` ou `docker compose ..
 
 ## Domínio
 
-Código em `domain/` é puro: sem I/O, com tempo e configuração passados explicitamente.
+Código em `domain/` é puro: sem I/O, com tempo e configuração passados explicitamente. Os testes de propriedade (Hypothesis) ficam em `tests/property/`; os construtores de dados sintéticos, em `tests/builders.py`.
 
 Modos, nunca misturados:
 
 - `RADIUS_TRIAGE`: ativos até 100.000 m do epicentro (`ST_DWithin` em geography). É proximidade, não intensidade. Testes a ±1 m da borda.
 - `SHAKEMAP_MMI`: MMI amostrado do grid no ponto do ativo; classificado se MMI ≥ 6,0. Nunca usar o MMI máximo do resumo para todos os ativos.
 
-Revisões de evento:
+Revisões de evento (`domain/events.py`, `domain/canonical.py`):
 
 - `semantic_sha256` = SHA-256 do JSON canônico de lon, lat, time, mag, event_type e status.
 - `revision_id` = SHA-256 do JSON canônico de `[provider_event_id, source_updated_at, semantic_sha256]`.
 - JSON canônico: chaves ordenadas, separadores compactos, UTF-8, instantes em ISO 8601 UTC com milissegundos.
-- Mesma `revision_id`: duplicata, sem efeito. Mesmo `source_updated_at` com `semantic_sha256` diferente: quarentena. `source_updated_at` mais antigo que o atual: só histórico.
+- Mesma `revision_id`: duplicata, sem efeito. Mesmo `source_updated_at` com conteúdo diferente: quarentena. `source_updated_at` mais antigo que o atual: só histórico.
+- Números normalizados antes do hash (`5` e `5.0`, `-0.0` e `0.0` dão o mesmo hash); `type` vazio vira nulo.
 - `status = deleted` vira RETRACTED e invalida as publicações do evento. Ausência no `all_day` não é retirada. 409 no detail leva a uma reconsulta por `eventid` com `includedeleted=true`.
 - Sem filtro por magnitude ou tipo na ingestão; `event_type` diferente de `earthquake` sai do cálculo pela regra. `mag`, `depth`, `type` e `types` podem vir nulos ou vazios. Coordenadas sempre lon, lat.
 
-Identidade:
+Identidade (`domain/aliases.py`):
 
-- `earthquake_uid` por evento, seguindo o `ids` da revisão mais recente.
-- Dois uids que passam a dividir ids: fica o do id preferido, o outro vira `merged_into` e tem as publicações invalidadas. Cada fusão ou separação grava uma linha em `event_alias_revision`.
+- `earthquake_uid` por evento, seguindo o `ids` da revisão mais recente. Revisão antiga não mexe no mapeamento.
+- Revisão cujo `ids` contém o id preferido de outro uid funde os dois: fica o uid que já tinha o id preferido da revisão, o outro vira `merged_into` e tem as publicações invalidadas. Cada fusão ou separação grava uma linha em `event_alias_revision`.
+- Revisão que divide com outro uid um id que não é o preferido dele, ou fusão com informação mais velha que a do uid absorvido: quarentena e reconsulta por `eventid`. Um id nunca fica em dois conjuntos atuais.
 - Nunca juntar eventos por distância ou tempo: réplicas são eventos distintos.
 
 ShakeMap (`domain/shakemap.py`):
@@ -65,16 +67,17 @@ Grid (`domain/grid.py`):
 - Passo = (max − min) / (n − 1), não o espaçamento nominal (que vem arredondado). Índice = round((x − min) / passo), só dentro da extensão. A longitude do ativo vai para o domínio do grid antes (antimeridiano).
 - Fora da extensão não há valor. Nada de extrapolar nem de MMI zero.
 
-Regra e resultado:
+Regra e resultado (`domain/rule.py`, `domain/money.py`, `domain/exposure.py`):
 
-- `rule_version` é imutável: raio, limiar de MMI, tipos elegíveis, política de seleção e método de amostragem. Mudou um valor, é versão nova.
+- `rule_version` é imutável: raio, limiar de MMI, tipos elegíveis, política de seleção e método de amostragem. A versão é o hash desse conteúdo, então mudar um valor gera versão nova.
+- MMI: elegível = vigente em T e dentro da extensão do grid; classificado = MMI ≥ limiar (inclusivo). RADIUS: elegível = vigente em T; classificado = devolvido pelo `ST_DWithin`.
 - Dinheiro: inteiro em unidade menor (`bigint`, soma em `numeric`, string no JSON, nunca float). Soma só por moeda (BRL e USD). Não somar a mesma carteira entre terremotos.
 - `exposure-result.status`: COMPLETE, NO_MAP, UNSUPPORTED_GRID, RETRACTED ou REDACTED_BY_ERASURE. NO_MAP e UNSUPPORTED_GRID publicam contagens e valores nulos.
 
-Carteira e publicação:
+Carteira e publicação (`domain/portfolio.py`, `domain/exposure.py`):
 
 - Vigência `[valid_from, valid_to)` sem sobreposição por ativo. As-of: versões conhecidas na epoch K e vigentes no instante T do evento, nunca o cadastro de hoje.
-- `calculation_id` = SHA-256 do vetor de entrada canônico. O worker publica só se `desired_generation` não mudou (CAS); job velho não publica.
+- `calculation_id` = SHA-256 do vetor de entrada canônico. No modo RADIUS o `product_revision_id` é `NONE`: mapa novo não recalcula o raio. O worker publica só se `desired_generation` não mudou (CAS); job velho não publica.
 - `stream_scope`: LIVE, REPLAY (captura real com horário original) e FAULT (mutação de teste, sempre rotulada).
 - `subject_token` é dado pessoal pseudonimizado: não vai para fatos, serving nem API.
 

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mudança de intervalo de ativo da carteira",
+  "description": "Uma versão de linha de asset_interval, com a epoch do comando que a gravou. Dinheiro como string em unidade menor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id",
+    "asset_interval_id",
+    "asset_id",
+    "subject_token",
+    "row_version",
+    "valid_from",
+    "valid_to",
+    "lon",
+    "lat",
+    "insured_value_minor",
+    "currency",
+    "is_deleted",
+    "updated_at",
+    "portfolio_epoch",
+    "source_epoch"
+  ],
+  "properties": {
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "asset_interval_id": { "type": "string", "minLength": 1 },
+    "asset_id": { "type": "string", "minLength": 1 },
+    "subject_token": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "row_version": { "type": "integer", "minimum": 1 },
+    "valid_from": { "$ref": "#/$defs/instant" },
+    "valid_to": { "anyOf": [{ "$ref": "#/$defs/instant" }, { "type": "null" }] },
+    "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+    "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+    "insured_value_minor": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "currency": { "enum": ["BRL", "USD"] },
+    "is_deleted": { "type": "boolean" },
+    "updated_at": { "$ref": "#/$defs/instant" },
+    "portfolio_epoch": { "type": "integer", "minimum": 1 },
+    "source_epoch": { "type": "integer", "minimum": 1 }
+  },
+  "$defs": {
+    "instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    }
+  }
+}
