@@ -1,8 +1,9 @@
 import random
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 import pytest
+from builders import grid_xml
 from conftest import MANIFEST
 
 from quakeexposure.domain.grid import Grid, UnsupportedGrid, parse_grid
@@ -64,34 +65,6 @@ def test_f15_outside_extent_has_no_value(name: str, usgs_fixture: Callable[[str]
         (mid_lon + 180, mid_lat),
     ]:
         assert grid.mmi_at(lon, lat) is None
-
-
-def grid_xml(
-    lons: Sequence[float],
-    lats: Sequence[float],
-    *,
-    fields: Sequence[str] = ("LON", "LAT", "MMI", "PGA"),
-    mmi: Callable[[int, int], float] = lambda r, c: 10 * r + c,
-    prolog: str = "",
-    skip_last: bool = False,
-) -> bytes:
-    rows = []
-    for r, lat in enumerate(lats):
-        for c, lon in enumerate(lons):
-            values = {"LON": lon, "LAT": lat, "MMI": mmi(r, c), "PGA": 0.5}
-            rows.append(" ".join(f"{values.get(f, 1.0):.4f}" for f in fields))
-    if skip_last:
-        rows.pop()
-    field_tags = "".join(
-        f'<grid_field index="{i + 1}" name="{f}" units="x" />' for i, f in enumerate(fields)
-    )
-    return (
-        f'<?xml version="1.0" encoding="UTF-8"?>{prolog}'
-        '<shakemap_grid xmlns="http://earthquake.usgs.gov/eqcenter/shakemap">'
-        f'<grid_specification lon_min="{lons[0]}" lat_min="{lats[-1]}" lon_max="{lons[-1]}" '
-        f'lat_max="{lats[0]}" nlon="{len(lons)}" nlat="{len(lats)}" />'
-        f"{field_tags}<grid_data>\n" + "\n".join(rows) + "\n</grid_data></shakemap_grid>"
-    ).encode()
 
 
 LONS = [10.0, 10.5, 11.0, 11.5]

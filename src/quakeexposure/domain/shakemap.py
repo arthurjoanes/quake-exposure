@@ -1,9 +1,17 @@
-"""Seleção da ShakeMap de um evento a partir do detail."""
+"""Seleção da ShakeMap de um evento a partir do detail.
 
-from collections.abc import Mapping
+Sem ShakeMap escolhida, a publicação do modo SHAKEMAP_MMI é NO_MAP.
+"""
+
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 GRID_PATH = "download/grid.xml"
+
+
+def latest_detail(details: Iterable[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """O detail com maior `updated` é o que vale para a seleção."""
+    return max(details, key=lambda d: d["properties"]["updated"])
 
 
 def select_shakemap(detail: Mapping[str, Any]) -> Mapping[str, Any] | None:

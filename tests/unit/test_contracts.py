@@ -5,8 +5,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from builders import T, asset, change, vector
 from conftest import MANIFEST
 from jsonschema import Draft202012Validator
+
+from quakeexposure.domain.exposure import ResultStatus, radius_facts, summarize, without_values
+from quakeexposure.domain.money import Currency
+from quakeexposure.domain.rule import Mode
 
 CONTRACTS = Path(__file__).parents[2] / "contracts"
 
@@ -90,3 +95,49 @@ def test_shakemap_rejects(
     product = copy.deepcopy(usgs_json("detail_us6000u0hy")["properties"]["products"]["shakemap"][0])
     change(product)
     assert errors(SHAKEMAP, product) != []
+
+
+ASSET_CHANGE = validator("asset-interval-change")
+EXPOSURE_RESULT = validator("exposure-result")
+
+
+def test_asset_interval_change_contract() -> None:
+    assert errors(ASSET_CHANGE, change()) == []
+    assert errors(ASSET_CHANGE, change(valid_to="2026-10-08T00:00:00.000Z")) == []
+    bad_changes: list[dict[str, Any]] = [
+        {"insured_value_minor": 100},
+        {"insured_value_minor": "1.5"},
+        {"currency": "EUR"},
+        {"valid_from": "2026-10-06T16:48:22Z"},
+        {"subject_token": "not-a-uuid"},
+        {"extra": 1},
+    ]
+    for bad in bad_changes:
+        assert errors(ASSET_CHANGE, change(**bad)) != [], bad
+    doc = change()
+    del doc["subject_token"]
+    assert errors(ASSET_CHANGE, doc) != []
+
+
+def test_exposure_result_contract() -> None:
+    radius = vector(mode=Mode.RADIUS_TRIAGE, product_revision_id=None)
+    complete = summarize(radius, radius_facts([asset("a", 0, 0, 5, Currency.BRL)], {"a"}), T)
+    assert errors(EXPOSURE_RESULT, complete.to_json()) == []
+    assert errors(EXPOSURE_RESULT, complete.to_json(published_at=T)) == []
+    for status in ResultStatus:
+        if status is not ResultStatus.COMPLETE:
+            assert errors(EXPOSURE_RESULT, without_values(vector(), status, T).to_json()) == []
+
+    out = complete.to_json()
+    for path, bad in [
+        (("status",), "NO_MAP"),  # NO_MAP com contagens
+        (("qualifying_value_minor", "BRL"), 5),  # número em vez de string
+        (("eligible_count",), None),
+        (("input_vector", "product_revision_id"), "urn:usgs-product:us:shakemap:x:1"),
+    ]:
+        doc = copy.deepcopy(out)
+        target = doc
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = bad
+        assert errors(EXPOSURE_RESULT, doc) != [], path

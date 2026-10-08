@@ -4,7 +4,7 @@ Cruza terremotos do USGS e os mapas de intensidade deles (ShakeMap) com uma cart
 
 Não é previsão, alerta nem modelo de dano ou perda. O USGS já publica ShakeMap e ShakeCast.
 
-Estado: só a base. Há o cliente HTTP do USGS, o parser do grid da ShakeMap, os contratos dos dados e as fixtures reais. Ainda não há banco, API nem página. O andamento está em [docs/progress.md](docs/progress.md).
+Estado: há o cliente HTTP do USGS, as fixtures reais, os contratos dos dados e o domínio em código puro (revisões, aliases, seleção de ShakeMap, grid, regra, carteira as-of e vetor de entrada). Ainda não há banco, coletor, API nem página. O andamento está em [docs/progress.md](docs/progress.md).
 
 ## Rodar
 

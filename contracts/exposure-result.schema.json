@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Resultado de exposição de um evento para um tenant num modo",
+  "description": "COMPLETE traz contagens e valores por moeda (string em unidade menor). Os outros status trazem contagens e valores nulos.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "calculation_id",
+    "input_vector",
+    "status",
+    "eligible_count",
+    "qualifying_count",
+    "qualifying_value_minor",
+    "calculated_at",
+    "published_at",
+    "limitations"
+  ],
+  "properties": {
+    "calculation_id": { "$ref": "#/$defs/sha256" },
+    "input_vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream_scope",
+        "earthquake_uid",
+        "event_semantic_sha256",
+        "product_revision_id",
+        "tenant_id",
+        "portfolio_epoch",
+        "portfolio_source_epoch",
+        "mode",
+        "privacy_epoch",
+        "rule_version"
+      ],
+      "properties": {
+        "stream_scope": { "enum": ["LIVE", "REPLAY", "FAULT"] },
+        "earthquake_uid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "event_semantic_sha256": { "$ref": "#/$defs/sha256" },
+        "product_revision_id": {
+          "type": "string",
+          "pattern": "^(NONE|urn:usgs-product:[^:]+:shakemap:[^:]+:[0-9]+)$"
+        },
+        "tenant_id": { "type": "string", "minLength": 1 },
+        "portfolio_epoch": { "type": "integer", "minimum": 0 },
+        "portfolio_source_epoch": { "type": "integer", "minimum": 0 },
+        "mode": { "enum": ["RADIUS_TRIAGE", "SHAKEMAP_MMI"] },
+        "privacy_epoch": { "type": "integer", "minimum": 0 },
+        "rule_version": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "status": {
+      "enum": ["COMPLETE", "NO_MAP", "UNSUPPORTED_GRID", "RETRACTED", "REDACTED_BY_ERASURE"]
+    },
+    "eligible_count": { "type": ["integer", "null"], "minimum": 0 },
+    "qualifying_count": { "type": ["integer", "null"], "minimum": 0 },
+    "qualifying_value_minor": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["BRL", "USD"],
+          "properties": {
+            "BRL": { "$ref": "#/$defs/minor" },
+            "USD": { "$ref": "#/$defs/minor" }
+          }
+        }
+      ]
+    },
+    "calculated_at": { "$ref": "#/$defs/instant" },
+    "published_at": { "anyOf": [{ "$ref": "#/$defs/instant" }, { "type": "null" }] },
+    "limitations": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "COMPLETE" } } },
+      "then": {
+        "properties": {
+          "eligible_count": { "type": "integer" },
+          "qualifying_count": { "type": "integer" },
+          "qualifying_value_minor": { "type": "object" }
+        }
+      },
+      "else": {
+        "properties": {
+          "eligible_count": { "type": "null" },
+          "qualifying_count": { "type": "null" },
+          "qualifying_value_minor": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "input_vector": { "properties": { "mode": { "const": "RADIUS_TRIAGE" } } } }
+      },
+      "then": {
+        "properties": {
+          "input_vector": { "properties": { "product_revision_id": { "const": "NONE" } } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "minor": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "instant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    }
+  }
+}
