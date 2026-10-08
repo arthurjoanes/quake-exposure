@@ -1,9 +1,11 @@
 from collections.abc import Callable
 from typing import Any
 
+from conftest import MANIFEST
+
 from quakeexposure.domain.shakemap import product_revision_id, select_shakemap
 
-DETAILS = ["detail_us6000u0hy", "detail_aka2026tuxgky", "detail_us7000tiur"]
+DETAILS = [e["name"] for e in MANIFEST if e["kind"] == "detail"]
 
 
 def detail_with(*products: dict[str, Any]) -> dict[str, Any]:
