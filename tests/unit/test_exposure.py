@@ -54,6 +54,8 @@ def test_any_input_change_gives_new_calculation_id(change: dict[str, Any]) -> No
 def test_radius_vector_does_not_depend_on_the_map() -> None:
     with pytest.raises(ValueError, match="RADIUS_TRIAGE"):
         vector(mode=Mode.RADIUS_TRIAGE)
+    with pytest.raises(ValueError, match="RADIUS_TRIAGE"):
+        vector(mode="RADIUS_TRIAGE")
     v = vector(mode=Mode.RADIUS_TRIAGE, product_revision_id=None)
     assert v.to_json()["product_revision_id"] == "NONE"
 
@@ -140,6 +142,7 @@ def test_f05_selection_and_map_that_disappears(usgs_json: Callable[[str], Any]) 
     newer["properties"]["updated"] += 1
     del newer["properties"]["products"]["shakemap"]
     assert select_shakemap(latest_detail([detail, newer])) is None
+    assert select_shakemap(latest_detail([newer, detail])) is None  # não é o último que chegou
 
     event = revision_from_feature(newer)
     v = vector(event_semantic_sha256=event.semantic_sha256, product_revision_id=None)
@@ -154,6 +157,8 @@ def test_f05_selection_and_map_that_disappears(usgs_json: Callable[[str], Any]) 
 def test_complete_cannot_be_published_without_values() -> None:
     with pytest.raises(ValueError):
         without_values(vector(), ResultStatus.COMPLETE, NOW)
+    with pytest.raises(ValueError):
+        without_values(vector(), "COMPLETE", NOW)  # type: ignore[arg-type]
 
 
 def test_f26_result_json_carries_money_as_string() -> None:

@@ -22,7 +22,6 @@ def test_instants_in_utc_with_milliseconds() -> None:
 
 
 def test_epoch_ms_is_exact() -> None:
-    # via float, 1791305302347 / 1000 cai em ...302.3469999
     assert iso_ms(from_epoch_ms(1_791_305_302_347)) == "2026-10-06T16:48:22.347Z"
     assert from_epoch_ms(-1) == datetime(1969, 12, 31, 23, 59, 59, 999_000, tzinfo=UTC)
 

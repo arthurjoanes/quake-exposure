@@ -39,7 +39,7 @@ O que as capturas mostraram:
 
 Pendências: nenhuma.
 
-## M1: domínio puro (2026-10-08)
+## M1: domínio puro (2026-10-07)
 
 Concluído.
 
@@ -47,7 +47,7 @@ Feito, em `src/quakeexposure/domain/`:
 
 - `canonical.py`: JSON canônico e SHA-256; instantes em ISO 8601 UTC com milissegundos; `updated` e `time` convertidos de milissegundos sem passar por float.
 - `events.py`: `EventRevision` a partir da feature, `semantic_sha256`, `revision_id`, `Lifecycle` e `EventHistory.apply` (atual, histórico, duplicata ou conflito).
-- `aliases.py`: `ingest` resolve o `earthquake_uid`, funde por id preferido (`merged_into`), registra fusões e separações e manda para quarentena o id disputado e a fusão com informação velha.
+- `aliases.py`: `ingest` resolve o `earthquake_uid` só pelos conjuntos atuais, funde por id preferido (`merged_into`), registra fusões e separações, manda para o histórico a revisão velha e para quarentena o id disputado e a revisão mais nova que uns uids e mais velha que outros.
 - `shakemap.py`: `latest_detail` e a seleção que já existia.
 - `rule.py`: modos e `Rule`, com a versão igual ao hash do conteúdo.
 - `money.py`: soma por moeda em inteiro, string no JSON e formatação.
@@ -55,11 +55,11 @@ Feito, em `src/quakeexposure/domain/`:
 - `exposure.py`: `InputVector` e `calculation_id`, fatos por ativo nos dois modos, `summarize` e `without_values`.
 - Contratos `contracts/asset-interval-change.schema.json` e `contracts/exposure-result.schema.json`.
 
-Testes: 163 (unitários e de propriedade com Hypothesis), mypy strict limpo em 33 arquivos.
+Testes: 168 (unitários e de propriedade com Hypothesis), mypy strict limpo em 33 arquivos.
 
 | Gate | Testes |
 |---|---|
-| F02 | `test_f02_out_of_order_revisions`, `test_f02_any_order_ends_in_the_newest_with_full_history` (permutações) |
+| F02 | `test_f02_out_of_order_revisions`, `test_f02_any_order_ends_in_the_newest_with_full_history` (permutações), `test_f02_through_ingest_with_preferred_id_change`, `test_f02_one_event_in_any_order` (pelo `ingest`, com troca de id preferido) |
 | F05 (seleção) | `test_f05_aka2026tuxgky_selects_ak_by_weight`, `test_f05_selection_and_map_that_disappears` |
 | F06 | `test_f06_same_version_with_other_content_is_a_conflict`, `test_f01_f06_repeated_or_conflicting_revision_changes_nothing` |
 | F13 (domínio) | `test_f13_move_after_event_and_retroactive_correction`, `test_f13_as_of_matches_replayed_source` (oráculo: foto da origem por epoch) |
@@ -67,9 +67,9 @@ Testes: 163 (unitários e de propriedade com Hypothesis), mypy strict limpo em 3
 | F15 | `test_f15_outside_extent_has_no_value`, `test_f15_outside_real_grid_is_not_eligible`, `test_f15_asset_on_the_edge_is_inside` |
 | F26 | `test_f26_totals_per_currency_above_2_pow_53`, `test_f26_totals_are_exact_and_per_currency`, `test_f26_result_json_carries_money_as_string` |
 
-Mutações conferidas à mão (cada uma derruba pelo menos um teste): índice truncado em vez de arredondado, revisão por ordem de chegada, as-of sem epoch, `valid_to` inclusivo, fusão sem tirar o uid absorvido, soma em float.
+Mutações conferidas à mão (cada uma derruba pelo menos um teste): índice truncado em vez de arredondado, revisão por ordem de chegada, as-of sem epoch, `valid_to` inclusivo, fusão sem tirar o uid absorvido, soma em float, e a versão anterior do `ingest` (que mandava para quarentena a revisão antiga de um evento cujo id preferido tinha mudado). Uma busca aleatória com 40.000 sequências de revisões não achou violação de: um id em um só evento ativo, `revision_id` em um só histórico, reenvio como duplicata, resultado igual com o catálogo restrito ao que a docstring pede e com outra ordem de linhas.
 
-Medição: em 3.000 pontos do grid de teste, o nó do índice foi sempre o mais próximo pelo geographiclib.
+Medição: em 3.000 pontos sorteados no grid de teste, o nó do índice foi o mais próximo pelo geographiclib. Rente à fronteira entre dois nós a diferença chega a 0,35 m, porque no elipsoide a fronteira não fica exatamente no meio do passo; o teste aceita até 1 m.
 
 Fica para o M3: a parte do F14 sobre o raio (99.999 m e 100.001 m) depende do `ST_DWithin` e é testada contra o PostGIS.
 
