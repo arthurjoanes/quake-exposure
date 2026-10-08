@@ -123,3 +123,18 @@ def change(**overrides: Any) -> dict[str, Any]:
     }
     doc.update(overrides)
     return doc
+
+
+DETAIL_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/detail/{}.geojson"
+
+
+def summary_of(detail: dict[str, Any], **props: Any) -> dict[str, Any]:
+    """Feature de feed a partir de um detail real: sem `products`, com a URL do detail."""
+    properties = {k: v for k, v in detail["properties"].items() if k != "products"}
+    properties["detail"] = DETAIL_URL.format(detail["id"])
+    properties.update(props)
+    return {**detail, "properties": properties}
+
+
+def collection(*features: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "FeatureCollection", "metadata": {}, "features": list(features)}

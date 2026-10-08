@@ -38,14 +38,33 @@ USER_AGENT = "quake-exposure/0.0.1"
 
 
 class FetchError(Exception):
-    pass
+    """`transient`: vale tentar de novo mais tarde (rede, 429, 5xx)."""
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
+
+
+class NotAllowed(FetchError):
+    """URL fora da allowlist ou sem HTTPS."""
+
+
+class ContentRejected(FetchError):
+    """Resposta recusada: acima do limite, gzip inválido ou diferente do declarado."""
+
+
+class TooLarge(ContentRejected):
+    """Acima do limite de bytes decodificados (ou do `length` declarado)."""
 
 
 class HttpStatusError(FetchError):
-    def __init__(self, url: str, status: int) -> None:
-        super().__init__(f"{url}: HTTP {status}")
+    def __init__(self, url: str, status: int, excerpt: str = "") -> None:
+        super().__init__(
+            f"{url}: HTTP {status} {excerpt}".rstrip(), transient=status in RETRY_STATUSES
+        )
         self.url = url
         self.status = status
+        self.excerpt = excerpt  # começo do corpo de um 4xx (o FDSN explica o erro ali)
 
 
 @dataclass(frozen=True)
@@ -106,10 +125,10 @@ class UsgsClient:
     def get_product(self, url: str, *, declared_length: int, declared_sha256: str) -> Fetched:
         """Baixa um arquivo de produto e confere com o `length` e o `sha256` do detail."""
         if declared_length > GRID_LIMIT:
-            raise FetchError(f"{url}: length declarado {declared_length} acima de {GRID_LIMIT}")
+            raise TooLarge(f"{url}: length declarado {declared_length} acima de {GRID_LIMIT}")
         fetched = self._get(url, None, GRID_LIMIT, READ_TIMEOUT)
         if len(fetched.body) != declared_length or sha256_b64(fetched.body) != declared_sha256:
-            raise FetchError(f"{url}: conteúdo não bate com o length/sha256 declarados")
+            raise ContentRejected(f"{url}: conteúdo não bate com o length/sha256 declarados")
         return fetched
 
     def _get(
@@ -118,28 +137,33 @@ class UsgsClient:
         # httpx.URL(url, params=None) apaga a query que já vem na URL
         target = httpx.URL(url).copy_merge_params(params or {})
         if target.scheme != "https" or target.host not in self._allowed_hosts:
-            raise FetchError(f"{target}: fora da allowlist")
+            raise NotAllowed(f"{target}: fora da allowlist")
         timeout = httpx.Timeout(read_timeout, connect=CONNECT_TIMEOUT)
         for attempt in range(1, MAX_ATTEMPTS + 1):
             fetched_at = self._now()
             retry_after: float | None = None
+            excerpt = ""
             try:
                 with self._slots, self._http.stream("GET", target, timeout=timeout) as resp:
                     status = resp.status_code
                     body = _read_limited(resp, limit, str(target)) if status == 200 else b""
                     if status in RETRY_STATUSES:
                         retry_after = _retry_after(resp.headers.get("retry-after"), fetched_at)
+                    elif 400 <= status < 500:
+                        excerpt = _excerpt(resp, str(target))
             except httpx.TransportError as exc:
                 log.warning("GET %s falhou: %r (tentativa %d)", target, exc, attempt)
                 if attempt == MAX_ATTEMPTS:
-                    raise FetchError(f"{target}: {exc!r}") from exc
+                    raise FetchError(f"{target}: {exc!r}", transient=True) from exc
             else:
                 log.info("GET %s -> %d, %d bytes", target, status, len(body))
                 if status == 200:
                     return Fetched(str(target), status, fetched_at, body)
                 if 300 <= status < 400:
                     raise FetchError(f"{target}: redirect HTTP {status} recusado")
-                if status not in RETRY_STATUSES or attempt == MAX_ATTEMPTS:
+                if status not in RETRY_STATUSES:
+                    raise HttpStatusError(str(target), status, excerpt)
+                if attempt == MAX_ATTEMPTS:
                     raise HttpStatusError(str(target), status)
             self._sleep(retry_after if retry_after is not None else self._backoff(attempt))
         raise AssertionError("unreachable")
@@ -162,17 +186,25 @@ def _retry_after(value: str | None, now: datetime) -> float | None:
     return min(max(seconds, 0.0), RETRY_AFTER_CAP)
 
 
+def _excerpt(resp: httpx.Response, url: str) -> str:
+    try:
+        text = _read_limited(resp, 64 * 1024, url)[:300].decode("utf-8", "replace")
+    except FetchError:
+        return ""
+    return " ".join(text.split())
+
+
 def _read_limited(resp: httpx.Response, limit: int, url: str) -> bytes:
     encoding = resp.headers.get("content-encoding", "identity").strip().lower()
     if encoding not in ("identity", "gzip"):
-        raise FetchError(f"{url}: content-encoding {encoding!r} não suportado")
+        raise ContentRejected(f"{url}: content-encoding {encoding!r} não suportado")
     out = bytearray()
     chunks: Iterator[bytes] = resp.iter_raw()
     if encoding == "identity":
         for chunk in chunks:
             out += chunk
             if len(out) > limit:
-                raise FetchError(f"{url}: acima de {limit} bytes")
+                raise TooLarge(f"{url}: acima de {limit} bytes")
         return bytes(out)
     gz = zlib.decompressobj(wbits=31)
     for chunk in chunks:
@@ -182,16 +214,16 @@ def _read_limited(resp: httpx.Response, limit: int, url: str) -> bytes:
             try:
                 out += gz.decompress(pending, limit + 1 - len(out))
             except zlib.error as exc:
-                raise FetchError(f"{url}: gzip inválido") from exc
+                raise ContentRejected(f"{url}: gzip inválido") from exc
             # o USGS manda um membro só; o que vier depois do fim é lixo e não conta no limite
             if gz.unused_data:
-                raise FetchError(f"{url}: dados após o fim do gzip")
+                raise ContentRejected(f"{url}: dados após o fim do gzip")
             if len(out) > limit:
-                raise FetchError(f"{url}: acima de {limit} bytes decodificados")
+                raise TooLarge(f"{url}: acima de {limit} bytes decodificados")
             pending = gz.unconsumed_tail
     out += gz.flush()
     if len(out) > limit:
-        raise FetchError(f"{url}: acima de {limit} bytes decodificados")
+        raise TooLarge(f"{url}: acima de {limit} bytes decodificados")
     if not gz.eof:
-        raise FetchError(f"{url}: gzip truncado")
+        raise ContentRejected(f"{url}: gzip truncado")
     return bytes(out)

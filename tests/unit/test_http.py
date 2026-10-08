@@ -228,3 +228,11 @@ def test_non_ascii_retry_after_falls_back_to_backoff() -> None:
     rec = Recorder(reply(503, retry_after="²".encode("latin-1")), reply())
     assert rec.client().get_json(FEED).body == b"{}"
     assert rec.sleeps == [1.0]
+
+
+def test_client_error_carries_body_excerpt() -> None:
+    body = b"Error 400: Bad Request\n\n20001 matching events exceeds search limit of 20000."
+    rec = Recorder(reply(400, body))
+    with pytest.raises(HttpStatusError) as err:
+        rec.client().get_json(FEED)
+    assert err.value.status == 400 and "exceeds search limit" in err.value.excerpt
