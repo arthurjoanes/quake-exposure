@@ -123,3 +123,75 @@ Revisão: quatro rodadas de revisão adversarial acharam e corrigiram, entre out
 
 Pendências: nenhuma.
 
+## M3: cálculo, página e v0.1 (2026-10-08)
+
+Concluído.
+
+Feito:
+
+- `sql/platform/0004`: esquemas `portfolio`, `exposure` e `serving`. Carteira com vigência `[valid_from, valid_to)` e exclusion constraint (`btree_gist`), cálculos, totais por moeda em `numeric`, fatos com PK `(calculation_id, asset_id)`, `control.exposure_job`, `serving.current_publication` e o log de trocas.
+- `portfolio/synthetic.py` e `qe portfolio seed`: 10.000 ativos em 2 tenants (seed 42), BRL e USD, a maior parte em volta dos eventos de demo, 5% mudam de lugar numa epoch 2.
+- `exposure/jobs.py`: escopo e marcação pelo vetor de entrada. A projeção sobe a geração dos jobs do evento na mesma transação em que grava a revisão (`touch`).
+- `exposure/worker.py`: claim com `FOR UPDATE SKIP LOCKED` e lease de 2 min, grid carregado antes da transação, cálculo e publicação numa transação com CAS na geração. Job atrasado em relação ao estado é acertado na hora.
+- `exposure/explain.py` e `qe explain`: vetor, causas e ativos que entraram e saíram.
+- `api/`: FastAPI somente leitura com o papel `qe_api_read`, em 127.0.0.1:8000, servindo também a página.
+- `web/`: TypeScript, Vite e Leaflet com mapa-base Natural Earth embutido (sem tiles externos). Mapa com eventos e ativos, revisões, modo, contagens e valores por moeda, antes e depois, faixa de desatualização, REPLAY e FAULT rotulados. Mapa e valores sempre da mesma publicação.
+- `qe demo` (passos 1, 2 e 4) e `qe bench`. Serviços `worker` e `api` no Compose.
+- 241 testes Python (171 unitários e de propriedade, 70 de integração, 18 deles de cálculo e API) e 33 da página (vitest).
+
+| Gate | Testes |
+|---|---|
+| F04 | `test_f04_merge_leaves_one_publication_and_the_value_once` |
+| F05 | `test_f05_publication_uses_the_preferred_map_and_no_map_has_null_counts`, `test_f05_live_map_that_disappears_turns_the_mmi_publication_into_no_map` |
+| F11 | `test_f11_worker_that_dies_before_commit_leaves_nothing` (com a API) |
+| F12 | `test_f12_stale_calculation_is_refused_by_the_generation` (com a API; a revisão nova chega só pela projeção) |
+| F14 | `test_f14_radius_edge_matches_geographiclib` (8 azimutes a 99.999 e 100.001 m de 4 epicentros, inclusive ±180 e 78,5° N) |
+| F26 | `test_f26_api_returns_exact_money_per_currency` (2^53 + 1 e 2^62) |
+| API | `test_api_is_coherent_and_never_shows_the_subject_token`, `test_api_role_cannot_read_the_raw_portfolio`, `test_api_lists_events_with_publication_first` |
+
+Também: F01 com publicação, totais iguais à soma dos fatos, as-of com o cálculo rodando depois da mudança do ativo, causa no `explain`, `explain` e `/diff` com o mesmo anterior depois de uma retirada, RETRACTED com contagens nulas, escopo LIVE (janela, watchlist e retirada fora da janela) e job atrasado que não volta igual para a fila.
+
+Demo na pilha real (10.000 ativos, worker do Compose no ar):
+
+```
+1. replay da captura real e cálculo inicial
+   REPLAY us7000tiur operadora-b RADIUS_TRIAGE: COMPLETE, elegíveis 5000, classificados 1931; BRL 5067820026, USD 29352865208 (unidade menor)
+   REPLAY us7000tiur operadora-b SHAKEMAP_MMI: COMPLETE, elegíveis 1972, classificados 45; BRL 86434666, USD 514787670 (unidade menor)
+   ...
+2. revisão FAULT que muda a exposição
+   operadora-b RADIUS: epicentro 0,5° a leste; entraram 1572, saíram 1; causa: revisão do evento
+   seguradora-a RADIUS: epicentro 0,5° a leste; entraram 1545, saíram 0; causa: revisão do evento
+   ...
+   revisão duplicada, nenhum cálculo novo; publication_id igual: sim
+4. job velho recusado pela geração
+   cálculo da geração 35: recusado; geração atual 36
+   publicada a geração 37
+```
+
+O passo 2 parte da última revisão FAULT de uma demo anterior (1,5° a leste); por isso entram ativos.
+
+Tempo de revisão aplicada até as 4 publicações (2 tenants × 2 modos): mediana de 1,56 s com o worker do Compose, que olha a fila a cada 1 s; 0,60 s só de marcação, cálculo e publicação. Detalhes e máquina em [results/m3-tempo-de-publicacao.md](results/m3-tempo-de-publicacao.md).
+
+A página foi aberta na pilha real: `us7000tiur` no REPLAY e no LIVE com valores por moeda e antes e depois; só requisições para 127.0.0.1; evento a −177,6° desenhado ao lado de um a 179,9°.
+
+Revisão: uma rodada adversarial em cinco frentes (SPEC, worker, API, página e testes), cada achado conferido por um segundo agente. Corrigido:
+
+- job cujo vetor mudou entre a marcação e o claim voltava igual para a fila, e a rodada do worker não terminava;
+- a mudança de entrada só subia a geração quando o worker marcava, então o CAS nunca recusava nada na pilha real (o teste do F12 marcava à mão);
+- no LIVE, mapa que some e retirada depois de 7 dias não mudavam a publicação;
+- `/api/events` cortava em 500 por data, e eventos publicados (a watchlist, boa parte dos 7 dias) sumiam da página; `limit` negativo dava 500;
+- `explain` e `/diff` discordavam do anterior depois de uma retirada;
+- marcadores do outro lado de ±180 ficavam a 360° do mapa-base;
+- a demo podia perder a corrida para o worker do Compose;
+- o `bench` repetia posições e media cálculos que já existiam (os números acima são da versão corrigida);
+- o teste de as-of passava com o cálculo usando o cadastro da hora do cálculo, e nenhum teste cobria o escopo.
+
+Cada correção tem teste que falha sem ela (conferido com mutação).
+
+Observações:
+
+- `exposure.fact` guarda todos os ativos do tenant em cada cálculo (cerca de 1 MB por cálculo de 5.000 ativos). Com demos e benches repetidos, o banco da máquina de teste chegou a 1,2 GB.
+- O default privilege do esquema `control` dá SELECT ao `qe_api_read` em toda tabela nova. A tabela de staging do CDC no M4 terá `subject_token` e precisa ficar fora disso.
+- Sem requisições ao USGS neste milestone: o coletor ficou parado e a demo usou REPLAY e FAULT.
+
+Pendências: nenhuma.

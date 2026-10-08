@@ -17,23 +17,27 @@ from quakeexposure.api import create_app
 from quakeexposure.domain.money import Currency
 from quakeexposure.exposure import jobs, worker
 from quakeexposure.exposure.explain import diff, publications
-from quakeexposure.ingestion.collector import FEED_URL
+from quakeexposure.ingestion.collector import FEED_URL, Collector
 from quakeexposure.ingestion.projection import project_pending
 from quakeexposure.ingestion.replay import capture_fault, replay
 from quakeexposure.portfolio.store import load
 from quakeexposure.portfolio.synthetic import VALID_FROM, SeedRow, generate
 
 from .conftest import Database, Harness, ok
+from .test_collector import (
+    TIUR_GRID,
+    TIUR_PRODUCT,
+    eventid,
+    incremental,
+    quiet,
+    tiur_feature,
+)
 
 ROOT = Path(__file__).parents[2]
 RESULT = Draft202012Validator(
     json.loads((ROOT / "contracts" / "exposure-result.schema.json").read_text("utf-8"))
 )
 FLORES = (120.5793, -8.307)
-
-
-def incremental(request: Any) -> bool:
-    return request.url.path == "/fdsnws/event/1/query" and "eventid" not in request.url.params
 
 
 def asset(
@@ -228,16 +232,13 @@ def test_f12_stale_calculation_is_refused_by_the_generation(
     seen_during_pause: list[int] = []
 
     def new_revision_arrives() -> None:
-        # outra conexão: o epicentro anda 1,2° para leste e a geração desejada sobe
+        # o coletor, noutra conexão: o epicentro anda 1,2° para leste. Só a projeção roda; é
+        # ela que sobe a geração desejada, sem esperar o marcador
         with database.connect() as other:
             moved = feature("us1", updated=2_000, lon=FLORES[0] + 1.2, lat=FLORES[1])
-            other.execute("SELECT 1")  # mesma rotina do coletor, noutra transação
-            from quakeexposure.ingestion.collector import Collector
-
             Collector(other, h.collector.client, h.blobs, h.clock)._take_collection(
                 "feed", _fetched(collection(moved), h.clock())
             )
-            jobs.mark(other, h.clock())
         seen_during_pause.append(api.get("/api/publications/current", params=query).status_code)
 
     assert worker.run(h.conn, h.blobs, job, h.clock, before_commit=new_revision_arrives) == "stale"
@@ -248,6 +249,85 @@ def test_f12_stale_calculation_is_refused_by_the_generation(
     assets = api.get(f"/api/publications/{body['publication_id']}/assets",
                      params={"tenant": "t1"}).json()["assets"]  # fmt: skip
     assert {a["asset_id"] for a in assets if a["qualifying"]} == {"east"}  # a revisão nova
+
+
+def test_job_behind_the_state_is_resynced_and_the_round_ends(harness: Harness) -> None:
+    h = harness
+    load(h.conn, [asset("t1", "a1", *FLORES)])
+    feed(h, feature("ak1", updated=1_000, lon=FLORES[0], lat=FLORES[1]),
+         feature("us1", updated=1_500, lon=FLORES[0] + 0.01, lat=FLORES[1]))  # fmt: skip
+    jobs.mark(h.conn, h.clock())
+    # antes de o worker pegar os jobs: ak1 é fundido em us1, e us1 tem revisão nova
+    feed(h, feature("us1", updated=3_000, ids=["ak1"], lon=FLORES[0] + 0.5, lat=FLORES[1]))
+    outcomes = []
+    for _ in range(20):
+        job = worker.claim(h.conn, h.clock())
+        if job is None:
+            break
+        outcomes.append(worker.run(h.conn, h.blobs, job, h.clock))
+    assert job is None  # nenhum job volta igual para a fila
+    assert sorted(outcomes) == ["published", "skipped", "skipped"]
+    assert [(t, pid, m) for t, pid, m, _ in current(h)] == [("t1", "us1", "RADIUS_TRIAGE")]
+
+
+def test_live_scope_follows_the_window_and_the_watchlist_and_retraction_still_counts(
+    harness: Harness,
+) -> None:
+    h = harness
+    load(h.conn, [asset("t1", "a1", *FLORES)])
+    old = int((h.clock() - timedelta(days=8)).timestamp() * 1000)
+    feed(h, feature("us1", updated=1_000, lon=FLORES[0], lat=FLORES[1], types=",origin,"),
+         feature("us2", updated=1_000, lon=FLORES[0], lat=FLORES[1], time=old))  # fmt: skip
+    jobs.mark(h.conn, h.clock())
+    assert h.count("control.exposure_job") == 0  # sem ShakeMap; com ShakeMap mas antigo
+    h.conn.execute("INSERT INTO control.watchlist (provider_event_id) VALUES ('us2')")
+    publish(h)
+    assert [(pid, m) for _, pid, m, _ in current(h)] == [("us2", "RADIUS_TRIAGE")]
+
+    # retirada depois da janela de 7 dias ainda invalida a publicação
+    feed(h, feature("us3", updated=1_000, lon=FLORES[0], lat=FLORES[1]))
+    publish(h)
+    h.clock.advance(days=30)
+    feed(h, feature("us3", updated=3_000, lon=FLORES[0], lat=FLORES[1], status="deleted",
+                    types=""))  # fmt: skip
+    publish(h)
+    retracted = h.conn.execute(
+        """SELECT DISTINCT c.status FROM serving.current_publication p
+           JOIN quake.earthquake e USING (stream_scope, earthquake_uid)
+           JOIN exposure.calculation c USING (calculation_id) WHERE e.preferred_id = 'us3'"""
+    ).fetchall()
+    assert retracted == [("RETRACTED",)]
+
+
+def test_f05_live_map_that_disappears_turns_the_mmi_publication_into_no_map(
+    harness: Harness, usgs_json: Callable[[str], Any], usgs_fixture: Callable[[str], bytes]
+) -> None:
+    h = harness
+    quiet(h)
+    load(h.conn, [asset("t1", "a1", *FLORES)])
+    h.usgs.on(incremental, ok(collection(tiur_feature(usgs_json))))
+    h.usgs.on(eventid("us7000tiur"), ok(usgs_fixture("detail_us7000tiur")))
+    h.usgs.on(TIUR_GRID, ok(usgs_fixture("grid_us7000tiur"), **{"content-encoding": "gzip"}))
+    h.collector.tick()  # evento de 2026-09-21, relógio em 2026-09-22: dentro dos 7 dias
+    publish(h)
+    mmi = """SELECT c.status, c.eligible_count, c.product_revision_id
+             FROM serving.current_publication p JOIN exposure.calculation c USING (calculation_id)
+             WHERE p.mode = 'SHAKEMAP_MMI'"""
+    assert h.conn.execute(mmi).fetchone() == ("COMPLETE", 1, TIUR_PRODUCT)
+
+    gone = usgs_json("detail_us7000tiur")
+    gone["properties"]["updated"] += 1000
+    gone["properties"]["types"] = ",origin,phase-data,"
+    del gone["properties"]["products"]["shakemap"]
+    newer = tiur_feature(usgs_json)
+    newer["properties"] = {**newer["properties"], "updated": gone["properties"]["updated"],
+                           "types": gone["properties"]["types"]}  # fmt: skip
+    h.usgs.on(incremental, ok(collection(newer)))
+    h.usgs.on(eventid("us7000tiur"), ok(gone))
+    h.clock.advance(minutes=11)
+    h.collector.tick()
+    publish(h)
+    assert h.conn.execute(mmi).fetchone() == ("NO_MAP", None, None)
 
 
 def _fetched(doc: dict[str, Any], at: datetime) -> Any:
@@ -368,6 +448,7 @@ def test_as_of_uses_where_the_asset_was_at_the_event_time(harness: Harness) -> N
     h = harness
     event_time = datetime(2026, 10, 6, 16, 48, 22, 347000, tzinfo=UTC)  # o do builder
     moved_at = event_time + timedelta(days=1)
+    h.clock.now = moved_at + timedelta(hours=1)  # o cálculo roda depois da mudança
     load(h.conn, [
         asset("t1", "a1", *FLORES, valid_to=moved_at),
         asset("t1", "a1", 0.0, 0.0, asset_interval_id="a1#2", valid_from=moved_at),
@@ -390,6 +471,43 @@ def test_explain_names_the_cause(harness: Harness) -> None:
     d = diff(h.conn, before, now)
     assert d["causes"] == ["revisão do evento"]
     assert [a["asset_id"] for a in d["left"]] == ["a1"] and d["entered"] == []
+
+
+def test_explain_and_the_api_agree_on_the_previous_publication_after_a_withdrawal(
+    harness: Harness, api: TestClient
+) -> None:
+    h = harness
+    load(h.conn, [asset("t1", "a1", *FLORES), asset("t1", "a2", FLORES[0] + 1.2, FLORES[1])])
+    feed(h, feature("us1", updated=1_000, lon=FLORES[0], lat=FLORES[1]))
+    publish(h)
+    first = h.one("SELECT calculation_id FROM serving.current_publication")
+    feed(h, feature("us1", updated=2_000, lon=FLORES[0], lat=FLORES[1], event_type="quarry blast"))
+    publish(h)
+    assert h.count("serving.current_publication") == 0  # tipo fora da regra: retirada
+    feed(h, feature("us1", updated=3_000, lon=FLORES[0] + 1.2, lat=FLORES[1]))
+    publish(h)
+    uid = h.one("SELECT earthquake_uid FROM quake.earthquake")
+    now, before = publications(h.conn, "t1", uid, "LIVE", "RADIUS_TRIAGE")
+    assert now is not None and before == first
+    body = api.get(f"/api/publications/{now}/diff", params={"tenant": "t1"}).json()
+    assert body["previous_publication_id"] == first
+    d = diff(h.conn, before, now)
+    assert body["causes"] == d["causes"] == ["revisão do evento"]
+    assert [a["asset_id"] for a in body["entered"]] == ["a2"]
+    assert [a["asset_id"] for a in body["left"]] == ["a1"]
+
+
+def test_api_lists_events_with_publication_first(harness: Harness, api: TestClient) -> None:
+    h = harness
+    load(h.conn, [asset("t1", "a1", *FLORES)])
+    yesterday = int((h.clock() - timedelta(days=1)).timestamp() * 1000)
+    feed(h, feature("us1", updated=1_000, lon=FLORES[0], lat=FLORES[1], types=",origin,"),
+         feature("us2", updated=1_000, lon=FLORES[0], lat=FLORES[1], time=yesterday))  # fmt: skip
+    publish(h)
+    # us1 é mais recente, mas não tem cálculo: o limite corta ele primeiro
+    events = api.get("/api/events", params={"limit": 1}).json()
+    assert [e["preferred_id"] for e in events] == ["us2"]
+    assert api.get("/api/events", params={"limit": -1}).status_code == 422
 
 
 def test_retracted_event_publishes_retracted_with_null_counts(harness: Harness) -> None:

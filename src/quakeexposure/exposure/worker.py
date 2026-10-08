@@ -1,9 +1,10 @@
-"""Worker de exposição (§4.8).
+"""Worker de exposição.
 
 Pega o job com FOR UPDATE SKIP LOCKED e uma lease curta, carrega o grid antes de abrir a
 transação e calcula tudo numa transação só: fatos, resumo por moeda, CAS na geração e troca de
 `serving.current_publication`. Se a geração desejada mudou durante o cálculo, nada é publicado
-(o job continua atrasado e volta na próxima rodada). Worker que morre no meio não deixa nada:
+(o job continua atrasado e volta na próxima rodada). Job cujo vetor já não bate com o estado é
+acertado na hora. Worker que morre no meio não deixa nada:
 a transação some e a lease expira.
 """
 
@@ -103,13 +104,13 @@ def run(
     tenant = next((t for t in tenants(conn) if t.tenant_id == job.tenant_id), None)
     vector = jobs.vector_for(target, tenant, job.mode, rule) if target and tenant else None
     if target is None or vector is None or vector.calculation_id != job.desired_calculation_id:
-        # o estado andou depois da marcação: o marcador acerta o job na próxima volta
-        _release(conn, job)
+        _resync(conn, job, vector, now())
         return "skipped"
-    grid = _load_grid(conn, blobs, target) if _needs_grid(target, vector) else None
+    stored = _exists(conn, vector.calculation_id)
+    grid = _load_grid(conn, blobs, target) if not stored and _needs_grid(target, vector) else None
     try:
         with conn.transaction():
-            if not _exists(conn, vector.calculation_id):
+            if not stored and not _exists(conn, vector.calculation_id):
                 result, facts, assets = _calculate(conn, target, vector, grid, rule, now())
                 _store(conn, target, result, facts, assets)
             if before_commit is not None:
@@ -321,6 +322,32 @@ def _publish(conn: Conn, job: Job, vector: InputVector, at: datetime) -> None:
                calculation_id, published_at) VALUES (%s, %s, %s, %s, %s, %s)""",
         (*key, vector.calculation_id, at),
     )
+
+
+def _resync(conn: Conn, job: Job, vector: InputVector | None, at: datetime) -> None:
+    """O estado andou depois da marcação. O job é acertado aqui, senão volta igual para a fila e
+    a rodada não termina. Sem vetor (fusão, tipo fora da regra, grid ainda não baixado), o job
+    fica em dia até o marcador ver um vetor novo."""
+    key = (job.tenant_id, job.earthquake_uid, job.stream_scope, job.mode, job.generation)
+    if vector is None:
+        done = conn.execute(
+            """UPDATE control.exposure_job
+               SET published_generation = desired_generation, lease_until = NULL, attempts = 0
+               WHERE tenant_id = %s AND earthquake_uid = %s AND stream_scope = %s AND mode = %s
+                 AND desired_generation = %s""",
+            key,
+        )
+    else:
+        done = conn.execute(
+            """UPDATE control.exposure_job
+               SET desired_calculation_id = %s, desired_generation = desired_generation + 1,
+                   marked_at = %s, lease_until = NULL, attempts = 0, last_error = NULL
+               WHERE tenant_id = %s AND earthquake_uid = %s AND stream_scope = %s AND mode = %s
+                 AND desired_generation = %s""",
+            (vector.calculation_id, at, *key),
+        )
+    if done.rowcount != 1:
+        _release(conn, job)  # o marcador mexeu antes
 
 
 def _release(conn: Conn, job: Job) -> None:

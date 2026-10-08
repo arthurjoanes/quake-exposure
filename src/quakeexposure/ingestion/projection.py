@@ -19,6 +19,7 @@ from quakeexposure.contracts import EVENT, SHAKEMAP, first_error
 from quakeexposure.domain.aliases import AliasKind, ingest
 from quakeexposure.domain.events import EventRevision, Outcome, revision_from_feature
 from quakeexposure.domain.grid import UnsupportedGrid, parse_grid
+from quakeexposure.exposure import jobs
 from quakeexposure.ingestion import store
 from quakeexposure.ingestion.blobs import BlobStore
 from quakeexposure.ingestion.store import Conn
@@ -254,6 +255,7 @@ def _ingest(
     if ingested.outcome is Outcome.CONFLICT:
         return ingested.outcome, str(ingested.outcome)
     assert ingested.uid is not None
+    jobs.touch(conn, capture.scope, {ingested.uid, *(c.uid for c in ingested.changes)})
     store.drop_alias_conflict(conn, capture.scope, rev)
     released = {i for c in ingested.changes if c.kind is AliasKind.SPLIT for i in c.ids}
     if live and released:

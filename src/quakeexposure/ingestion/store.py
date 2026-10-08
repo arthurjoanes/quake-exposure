@@ -250,7 +250,7 @@ def has_map(conn: Conn, scope: str, uid: UUID) -> bool:
 def store_detail_products(
     conn: Conn, scope: str, uid: UUID, detail: Mapping[str, Any], capture_id: int
 ) -> None:
-    """Produtos ShakeMap do detail e a escolha (§4.3) se este for o detail mais recente."""
+    """Produtos ShakeMap do detail e a escolha se este for o detail mais recente."""
     detail_updated = from_epoch_ms(detail["properties"]["updated"])
     for p in detail["properties"].get("products", {}).get("shakemap", []):
         grid = p["contents"].get(GRID_PATH) or {}

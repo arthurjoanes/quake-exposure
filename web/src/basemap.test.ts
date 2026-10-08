@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planar } from "./basemap";
+import { near, planar } from "./basemap";
 
 const maxJump = (ring: number[][]): number =>
   Math.max(...ring.slice(1).map((p, i) => Math.abs(p[0] - ring[i][0])));
@@ -24,5 +24,14 @@ describe("planar", () => {
     const ring = first[0];
     expect(ring.slice(-4)).toEqual([[190, -80], [190, -90], [-170, -90], [-170, -80]]);
     expect(maxJump(ring.slice(0, 5))).toBeLessThanOrEqual(180);
+  });
+});
+
+describe("near", () => {
+  it("traz para perto do centro o ponto do outro lado de ±180", () => {
+    expect(near(-177.6, 179.9)).toBeCloseTo(182.4);
+    expect(near(179.9, -179.95)).toBeCloseTo(-180.1);
+    expect(near(120.5, 121)).toBe(120.5);
+    expect(near(10, 370)).toBe(370);
   });
 });
