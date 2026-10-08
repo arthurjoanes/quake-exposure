@@ -28,8 +28,8 @@
       "type": "object",
       "required": ["time", "updated", "mag", "status", "type", "types", "ids", "net", "code"],
       "properties": {
-        "time": { "type": "integer" },
-        "updated": { "type": "integer" },
+        "time": { "type": "integer", "minimum": -62135596800000, "maximum": 253402300799999 },
+        "updated": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
         "mag": { "type": ["number", "null"] },
         "status": { "enum": ["automatic", "reviewed", "deleted"] },
         "type": { "type": ["string", "null"] },

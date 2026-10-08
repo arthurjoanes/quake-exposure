@@ -54,10 +54,12 @@ def captured(conn: Conn, scope: str, sha256: str) -> bool:
 def quarantine(
     conn: Conn, scope: str, capture_id: int | None, reason: str, item_sha256: str
 ) -> None:
+    # só caracteres imprimíveis: um NUL vindo de chave do documento não derruba a gravação
+    clean = "".join(ch if ch.isprintable() else "?" for ch in reason)[:500]
     conn.execute(
         """INSERT INTO control.quarantine (stream_scope, capture_id, reason, item_sha256)
            VALUES (%s, %s, %s, %s)""",
-        (scope, capture_id, reason[:500], item_sha256),
+        (scope, capture_id, clean, item_sha256),
     )
 
 
@@ -257,7 +259,8 @@ def store_detail_products(
                    earthquake_uid, source, code, update_time, preferred_weight, status, grid_url,
                    grid_length, grid_sha256, detail_updated_at, capture_id)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (stream_scope, product_revision_id) DO NOTHING""",
+               ON CONFLICT (stream_scope, product_revision_id) DO UPDATE
+                   SET earthquake_uid = EXCLUDED.earthquake_uid""",
             (scope, product_revision_id(p), uid, p["source"], p["code"], p["updateTime"],
              p["preferredWeight"], p["status"], grid.get("url"), grid.get("length"),
              grid.get("sha256"), detail_updated, capture_id),
@@ -309,6 +312,32 @@ def request_fetch(conn: Conn, provider_event_id: str, url: str, reason: str, now
                attempts = 0, last_error = NULL""",
         (provider_event_id, url, reason, now),
     )
+
+
+def add_alias_conflict(conn: Conn, scope: str, rev: EventRevision, disputed: list[str]) -> None:
+    conn.execute(
+        """INSERT INTO control.alias_conflict (stream_scope, revision_id, provider_event_id,
+               disputed) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+        (scope, rev.revision_id, rev.provider_event_id, disputed),
+    )
+
+
+def drop_alias_conflict(conn: Conn, scope: str, rev: EventRevision) -> None:
+    """A revisão entrou: o conflito dela, e o de revisões mais velhas do mesmo id, acabou."""
+    conn.execute(
+        """DELETE FROM control.alias_conflict WHERE stream_scope = %s
+           AND (revision_id = %s OR provider_event_id = %s)""",
+        (scope, rev.revision_id, rev.provider_event_id),
+    )
+
+
+def alias_conflicts_on(conn: Conn, scope: str, ids: Iterable[str]) -> list[str]:
+    rows = conn.execute(
+        """SELECT DISTINCT provider_event_id FROM control.alias_conflict
+           WHERE stream_scope = %s AND disputed && %s ORDER BY 1""",
+        (scope, sorted(ids)),
+    )
+    return [r[0] for r in rows]
 
 
 def watch(conn: Conn, provider_event_id: str, url: str, now: datetime) -> None:
