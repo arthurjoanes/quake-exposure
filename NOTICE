@@ -1,0 +1,12 @@
+QuakeExposure
+Copyright (c) 2026 Arthur Joanes. Código sob a licença MIT (ver LICENSE).
+
+Dados de terremotos e ShakeMap: U.S. Geological Survey, Earthquake Hazards Program.
+Catálogo: ANSS Comprehensive Earthquake Catalog (ComCat), doi:10.5066/F7MS3QZH.
+
+Os dados do USGS são de domínio público. Os arquivos em tests/fixtures/usgs/ são
+capturas desses dados sem alteração, apenas comprimidos com gzip; a origem, o horário
+e o sha256 de cada um estão em tests/fixtures/manifest.json.
+
+Grids de ShakeMap de outras redes (ak, ci etc.) não são distribuídos neste
+repositório. O scripts/fetch_fixtures.py baixa esses arquivos da fonte.

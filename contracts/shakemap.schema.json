@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Produto ShakeMap no detail do USGS (properties.products.shakemap[])",
+  "description": "Campos usados na seleção do produto e no download do grid.xml.",
+  "type": "object",
+  "required": ["id", "type", "code", "source", "updateTime", "status", "preferredWeight", "contents"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^urn:usgs-product:[^:]+:shakemap:[^:]+:[0-9]+$" },
+    "type": { "const": "shakemap" },
+    "code": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "updateTime": { "type": "integer" },
+    "status": { "type": "string" },
+    "preferredWeight": { "type": "integer" },
+    "contents": {
+      "type": "object",
+      "properties": {
+        "download/grid.xml": {
+          "type": "object",
+          "required": ["url", "length", "sha256"],
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://earthquake\\.usgs\\.gov/" },
+            "length": { "type": "integer", "minimum": 0 },
+            "sha256": { "type": "string", "pattern": "^[A-Za-z0-9+/]{43}=$" }
+          }
+        }
+      },
+      "additionalProperties": { "type": "object" }
+    }
+  }
+}
