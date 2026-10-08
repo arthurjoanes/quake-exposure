@@ -1,0 +1,73 @@
+name: quake-exposure
+
+x-app: &app
+  build: .
+  image: quake-exposure-app:dev
+  init: true  # o Python não é PID 1: SIGTERM do stop/down chega ao processo
+  environment: &db
+    QE_DB_HOST: platform-db
+    QE_DB_NAME: qe
+  networks: [pipeline]
+
+services:
+  platform-db:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres
+    secrets: [postgres, qe_owner, qe_pipeline, qe_api_read]
+    configs:
+      - source: platform-db-init
+        target: /docker-entrypoint-initdb.d/10-roles.sh
+    volumes:
+      - platform-db:/var/lib/postgresql
+    networks: [app, pipeline]
+    restart: unless-stopped
+    healthcheck:
+      # TCP: durante a inicialização o servidor temporário só escuta no socket local
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "qe"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  migrate:
+    <<: *app
+    command: ["qe", "migrate"]
+    environment:
+      <<: *db
+      QE_DB_USER: qe_owner
+      QE_DB_PASSWORD_FILE: /run/secrets/qe_owner
+    secrets: [qe_owner]
+    depends_on:
+      platform-db: {condition: service_healthy}
+
+  collector:
+    <<: *app
+    command: ["qe", "collect"]
+    environment:
+      <<: *db
+      QE_DB_USER: qe_pipeline
+      QE_DB_PASSWORD_FILE: /run/secrets/qe_pipeline
+    secrets: [qe_pipeline]
+    volumes:
+      - blobs:/data/blobs
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+secrets:
+  postgres: {file: "${QE_SECRETS_DIR:-./.secrets}/postgres"}
+  qe_owner: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_owner"}
+  qe_pipeline: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_pipeline"}
+  qe_api_read: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_api_read"}
+
+configs:
+  platform-db-init:
+    file: ./docker/platform-db-init.sh
+
+volumes:
+  platform-db:
+  blobs:
+
+networks:
+  app:
+  pipeline:

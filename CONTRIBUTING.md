@@ -6,14 +6,22 @@ Guia de desenvolvimento e manutenção do repositório.
 
 ```bash
 uv sync
-uv run pytest
+uv run pytest                                     # unit, property e integration (precisa do Docker)
+uv run pytest tests/unit tests/property           # sem Docker
 uv run ruff check .
 uv run ruff format .
 uv run mypy
-uv run qe --version
+uv run qe secrets                                 # senhas em .secrets/ (as que faltarem)
+docker compose up -d --build                      # PostGIS, migrações e coletor
+docker compose exec collector qe status
+docker compose exec collector qe replay
+docker compose exec collector qe backfill --from 2026-10-01 --to 2026-10-07
+docker compose exec collector qe watch add <eventid>
 uv run python scripts/fetch_fixtures.py pull      # grids de outras redes, fora do Git
 uv run python scripts/fetch_fixtures.py capture   # recaptura tudo (requisições reais ao USGS)
 ```
+
+Banco: `sql/platform/NNNN_*.sql`, aplicadas pelo `qe migrate` (serviço `migrate` do Compose, papel `qe_owner`). Migração aplicada não se edita; mudança entra numa migração nova. Papéis: `qe_owner` (migrações), `qe_pipeline` (coletor e worker), `qe_api_read` (somente leitura), criados por `docker/platform-db-init.sh` na criação do volume.
 
 Não há Makefile. Comando novo entra como `uv run qe ...` ou `docker compose ...` e é documentado aqui e no README.
 
@@ -86,6 +94,9 @@ Carteira e publicação (`domain/portfolio.py`, `domain/exposure.py`):
 
 ## Coleta do USGS
 
+Código em `ingestion/`: `http.py` (cliente), `collector.py` (agenda e tarefas), `projection.py` (captura para revisões, mapas e grids), `store.py` (SQL), `replay.py` (REPLAY e FAULT), `blobs.py` (gzip endereçado por sha256).
+
+
 - Allowlist `earthquake.usgs.gov`, só HTTPS, TLS verificado, redirect é erro.
 - Timeouts: conexão 3 s, leitura 20 s, FDSN 90 s.
 - Limites em bytes decodificados: 10 MiB para JSON, 100 MiB para grid (o `length` declarado é checado antes), 2 milhões de pontos.
@@ -94,3 +105,7 @@ Carteira e publicação (`domain/portfolio.py`, `domain/exposure.py`):
 - Produto baixado tem que bater com o `length` e o `sha256` (base64) declarados no detail.
 - A URL do grid vem de `contents["download/grid.xml"].url`; não montar caminho.
 - Falha de rede aparece como fonte desatualizada, nunca como ausência de terremotos.
+- Agenda: feed a cada 60 s; detail quando o `updated` muda e o evento tem ShakeMap (ou já tinha mapa); grid só do produto escolhido de evento dos últimos 7 dias ou da watchlist; incremental FDSN a cada 600 s com `includedeleted=true`, watermark só avança se a consulta terminar, janela dividida ao meio se o FDSN recusar por excesso.
+- Captura: blob gravado (temporário, fsync, rename) antes da linha em `control.capture`. O feed só vira captura se trouxer revisão nova. A projeção roda logo depois, em outra transação; erro vai para `control.quarantine` (motivo e hash, sem payload).
+- 409, 404 ou 410 no detail: reconsulta por `eventid` com `includedeleted=true`. Conflito de alias vindo do feed ou do FDSN: reconsulta dos ids envolvidos.
+

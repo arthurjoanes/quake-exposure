@@ -1,0 +1,5 @@
+# Só para os testes de integração: publica o banco numa porta aleatória de 127.0.0.1.
+# Uso: docker compose -p <nome> -f compose.yaml -f compose.test.yaml up -d --wait platform-db
+services:
+  platform-db:
+    ports: ["127.0.0.1::5432"]
