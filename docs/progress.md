@@ -74,3 +74,52 @@ Medição: em 3.000 pontos sorteados no grid de teste, o nó do índice foi o ma
 Fica para o M3: a parte do F14 sobre o raio (99.999 m e 100.001 m) depende do `ST_DWithin` e é testada contra o PostGIS.
 
 Pendências: nenhuma.
+
+## M2: ingestão do USGS e replay (2026-10-08)
+
+Concluído.
+
+Feito:
+
+- `compose.yaml`: `platform-db` (PostGIS 18/3.6) em volume nomeado, sem porta publicada; `migrate` (papel `qe_owner`) antes do `collector` (papel `qe_pipeline`); senhas de `.secrets/` por `*_FILE`; healthcheck que exige o banco `qe` e os papéis. `docker/platform-db-init.sh` cria os papéis e as extensões.
+- Migrações `sql/platform/0001` a `0003`: capturas, quarentena, estado das fontes, pedidos de detail, watchlist, cursor do backfill, eventos, aliases, revisões, produtos ShakeMap, mapa escolhido, grids, conflitos de alias pendentes e tentativas de grid. Tudo com `stream_scope`.
+- `ingestion/collector.py`: feed a cada 60 s, incremental FDSN a cada 600 s (`includedeleted=true`, timeout de 90 s, watermark só avança com a consulta inteira aplicada, janela dividida ao meio se o FDSN recusar ou passar de 10 MiB), details e reconsultas, grids de eventos em escopo, backfill por dia.
+- `ingestion/projection.py` e `store.py`: captura (blob gzip, fsync, rename, depois a linha) e projeção pelo domínio do M1, uma feature por savepoint, quarentena com motivo e hash, uma linha por item.
+- `ingestion/replay.py`: REPLAY das capturas do manifesto e FAULT rotulado com `parent_sha256`.
+- `qe secrets`, `migrate`, `collect`, `backfill`, `replay`, `status`, `watch`.
+- 223 testes: 171 unitários e de propriedade, 52 de integração com PostGIS real num projeto Compose próprio (sobe e derruba).
+
+| Gate | Testes |
+|---|---|
+| F01 | `test_f01_same_feed_twice_adds_nothing`, `test_f01_replay_twice_adds_nothing` |
+| F03 | `test_f03_deleted_event_in_incremental_is_retracted`, `test_f03_detail_409_is_reconsulted_with_includedeleted` |
+| F04 | `test_f04_two_events_that_start_sharing_ids_become_one` |
+| F07 | `test_f07_grid_that_does_not_match_the_declared_is_rejected` |
+| F08 | `test_f08_retry_after_then_stale_source_keeps_events` |
+| F21 | `test_f21_detail_url_outside_allowlist`, `test_f21_grid_with_dtd_is_unsupported`, `test_f21_gzip_bomb_in_feed` |
+| Watermark | `test_failed_incremental_does_not_advance_watermark`, `test_useless_200_does_not_count_as_success`, `test_lock_timeout_keeps_the_capture_pending_and_the_watermark` |
+
+Também com PostGIS: F05 (`test_f05_preferred_map_is_not_the_newest`), F06 (`test_f06_same_version_with_other_content_goes_to_quarantine`), mapa que some vira NO_MAP, escopo de 7 dias e watchlist, divisão de janela, backfill com cursor, separação LIVE/REPLAY/FAULT, papéis, migração editada recusada, e os casos de recuperação em `tests/integration/test_quarantine.py`, `test_recovery.py` e `test_rules.py`.
+
+Coleta real:
+
+| Janela (UTC, 2026-10-08) | Código | Requisições | Resultado |
+|---|---|---:|---|
+| 02:35–03:09 | antes das correções da revisão | 50, todas 200 | sem erro no log, quarentena vazia |
+| 03:09–03:39 | `d8739b7` | 33, todas 200 | sem erro no log |
+| 03:39–05:01 | `7e6a6d3` e `543b94b` | não contadas (o log se perdeu ao recriar o container) | banco sem quarentena em 05:01 |
+| 05:01–06:01 | `c08ba95` | 85: 59 feed, 16 FDSN, 9 grids, 1 com 409 | sem erro, aviso ou traceback no log; 1 linha de quarentena (abaixo) |
+
+Na última janela também rodaram `qe backfill` de 2026-10-06 (322 revisões novas em 3,7 s), `qe replay` (8 capturas como REPLAY) e `qe watch add us7000tiur` (detail e grid de um evento fora dos 7 dias). No fim: 622 eventos LIVE ativos, 5 retirados, 660 revisões, 15 mapas, 17 grids, banco com 18 MB.
+
+O que a fonte mostrou:
+
+- O FDSN respondeu em 1 a 4 s, bem abaixo dos 19 a 35 s vistos antes; o incremental de 10 min trouxe de 2 a 7 KB.
+- O maior grid baixado tem 392.805 pontos e 21,8 MB (`a2026tvbgrt`, rede `ak`).
+- Um 409 real (`aka2026tuxiyh`, deletado) seguiu o caminho do F03: reconsulta com `includedeleted=true` e o evento ficou RETRACTED.
+- Para o mesmo `updated`, a coleção do FDSN trouxe esse evento deletado com `type: "earthquake"` e a consulta por `eventid` com `type: ""`. Isso deu um CONFLICT falso. Corrigido depois da janela: em evento deletado o tipo não entra no hash.
+
+Revisão: quatro rodadas de revisão adversarial acharam e corrigiram, entre outros, janela do FDSN acima de 10 MiB que travava o watermark, resposta 200 inútil contada como sucesso, revisão em conflito regravada a cada minuto, feature que derrubava a captura inteira, detail de cache que fechava o pedido, grid com falha que travava os outros e erro do ambiente que virava quarentena permanente. Cada correção tem teste que falha sem ela.
+
+Pendências: nenhuma.
+

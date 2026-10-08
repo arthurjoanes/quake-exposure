@@ -59,6 +59,15 @@ def test_accepts_null_and_empty_fields() -> None:
     assert revision_from_feature(f).depth_km is None
 
 
+def test_deleted_revision_ignores_the_unreliable_type() -> None:
+    # visto no FDSN real (aka2026tuxiyh): coleção com "earthquake", eventid com ""
+    from_collection = revision("ak1", updated=1, status="deleted", event_type="earthquake")
+    from_eventid = revision("ak1", updated=1, status="deleted", event_type="")
+    assert from_collection.revision_id == from_eventid.revision_id
+    assert from_collection.event_type is None
+    assert revision("ak1", updated=1, event_type="explosion").event_type == "explosion"
+
+
 def test_f03_deleted_status_retracts() -> None:
     assert revision("us1", updated=1).lifecycle is Lifecycle.ACTIVE
     assert revision("us1", updated=2, status="deleted").lifecycle is Lifecycle.RETRACTED
