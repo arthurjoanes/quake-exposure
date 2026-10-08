@@ -406,10 +406,11 @@ def test_retracted_event_publishes_retracted_with_null_counts(harness: Harness) 
     assert row == ("RETRACTED", None)
 
 
-def test_api_role_cannot_read_the_raw_portfolio(database: Database) -> None:
+def test_api_role_cannot_read_the_raw_portfolio(harness: Harness, database: Database) -> None:
     import psycopg
 
+    load(harness.conn, [asset("t1", "a1", *FLORES)])
     with database.connect("qe_api_read") as api_conn:
-        assert api_conn.execute("SELECT count(*) FROM portfolio.tenant").fetchone() == (0,)
+        assert api_conn.execute("SELECT count(*) FROM portfolio.tenant").fetchone() == (1,)
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             api_conn.execute("SELECT subject_token FROM portfolio.asset_revision")
