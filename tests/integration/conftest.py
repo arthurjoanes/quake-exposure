@@ -74,7 +74,8 @@ def conn(database: Database) -> Iterator[psycopg.Connection[Any]]:
             f"{s}.{t}"
             for s, t in owner.execute(
                 """SELECT table_schema, table_name FROM information_schema.tables
-                   WHERE table_schema IN ('control', 'quake') AND table_type = 'BASE TABLE'
+                   WHERE table_schema IN ('control', 'quake', 'portfolio', 'exposure', 'serving')
+                     AND table_type = 'BASE TABLE'
                      AND table_name <> 'schema_migration'"""
             )
         ]

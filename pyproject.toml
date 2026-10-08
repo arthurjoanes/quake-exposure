@@ -8,9 +8,11 @@ authors = [{ name = "Arthur Joanes" }]
 requires-python = ">=3.14"
 dependencies = [
     "defusedxml>=0.7.1",
+    "fastapi>=0.143.0",
     "httpx>=0.28.1",
     "jsonschema>=4.26.0",
     "psycopg[binary]>=3.3.6",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [project.scripts]

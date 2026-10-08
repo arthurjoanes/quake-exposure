@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>QuakeExposure</title>
+  </head>
+  <body>
+    <header>
+      <h1>QuakeExposure</h1>
+      <label>Escopo
+        <select id="scope">
+          <option value="LIVE">LIVE</option>
+          <option value="REPLAY">REPLAY</option>
+          <option value="FAULT">FAULT</option>
+        </select>
+      </label>
+      <label>Tenant <select id="tenant"></select></label>
+      <label>Evento <select id="event"></select></label>
+      <label>Modo
+        <select id="mode">
+          <option value="RADIUS_TRIAGE">RADIUS_TRIAGE (100 km)</option>
+          <option value="SHAKEMAP_MMI">SHAKEMAP_MMI (MMI ≥ 6,0)</option>
+        </select>
+      </label>
+      <span id="clock"></span>
+    </header>
+    <div id="scope-note" class="strip" hidden></div>
+    <div id="stale" class="strip" hidden></div>
+    <main>
+      <div id="map-wrap">
+        <div id="map"></div>
+        <div class="legend">
+          <span class="dot q"></span>classificado
+          <span class="dot e"></span>elegível
+          <span class="dot n"></span>não elegível
+          <span class="dot ev"></span>evento
+        </div>
+      </div>
+      <aside>
+        <section id="event-panel"></section>
+        <section id="summary"></section>
+        <section id="diff"></section>
+        <section id="assets"></section>
+      </aside>
+    </main>
+    <footer>Terremotos e ShakeMap: USGS. Carteira fictícia. Mapa-base: Natural Earth.</footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -59,6 +59,35 @@ services:
     depends_on:
       migrate: {condition: service_completed_successfully}
 
+  worker:
+    <<: *app
+    command: ["qe", "worker"]
+    environment:
+      <<: *db
+      QE_DB_USER: qe_pipeline
+      QE_DB_PASSWORD_FILE: /run/secrets/qe_pipeline
+    secrets: [qe_pipeline]
+    volumes:
+      - blobs:/data/blobs
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  api:
+    <<: *app
+    # dentro do container escuta em todas as interfaces; fora, só 127.0.0.1
+    command: ["qe", "api", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *db
+      QE_DB_USER: qe_api_read
+      QE_DB_PASSWORD_FILE: /run/secrets/qe_api_read
+    secrets: [qe_api_read]
+    ports: ["127.0.0.1:8000:8000"]
+    networks: [app]
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
 secrets:
   postgres: {file: "${QE_SECRETS_DIR:-./.secrets}/postgres"}
   qe_owner: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_owner"}

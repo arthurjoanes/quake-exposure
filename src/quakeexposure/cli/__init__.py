@@ -29,6 +29,22 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("watch", help="watchlist de eventos que sempre entram no cálculo")
     p.add_argument("action", choices=["add", "remove", "list"])
     p.add_argument("event_id", nargs="?")
+    p = sub.add_parser("portfolio", help="carteira fictícia: carga direta na plataforma")
+    p.add_argument("action", choices=["seed"])
+    p.add_argument("--assets", type=int, default=10_000)
+    p.add_argument("--seed", type=int, default=42)
+    sub.add_parser("worker", help="calcula e publica a exposição sem parar")
+    p = sub.add_parser("explain", help="vetor de entrada e o que mudou desde a publicação anterior")
+    p.add_argument("event_id")
+    p.add_argument("--tenant", required=True)
+    p.add_argument("--mode", choices=["RADIUS_TRIAGE", "SHAKEMAP_MMI"], required=True)
+    p.add_argument("--scope", choices=["LIVE", "REPLAY", "FAULT"], default="LIVE")
+    p = sub.add_parser("api", help="API somente leitura e a página")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    sub.add_parser("demo", help="demonstração: replay, revisão FAULT e job velho recusado")
+    p = sub.add_parser("bench", help="tempo de revisão aplicada até publicação (worker rodando)")
+    p.add_argument("--rounds", type=int, default=5)
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -58,6 +74,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "watch":
         return _watch(args.action, args.event_id)
+    if args.command == "api":
+        import uvicorn
+
+        uvicorn.run("quakeexposure.api:app", host=args.host, port=args.port)
+        return 0
+    if args.command == "portfolio":
+        from quakeexposure.portfolio.store import load
+        from quakeexposure.portfolio.synthetic import generate
+
+        with connect() as conn:
+            n = load(conn, generate(args.assets, args.seed))
+        print(f"versões de ativo carregadas: {n}")
+        return 0
+    if args.command == "explain":
+        return _explain(args)
 
     from quakeexposure.ingestion.blobs import BlobStore
 
@@ -71,6 +102,21 @@ def main(argv: list[str] | None = None) -> int:
             f"capturas gravadas: {done.stored}, já existiam: {done.already},"
             f" sem arquivo: {done.missing}"
         )
+        return 0
+
+    if args.command == "worker":
+        from quakeexposure.exposure import worker
+
+        worker.run_forever(lambda: (connect(), blobs))
+        return 0
+    if args.command in ("demo", "bench"):
+        from quakeexposure.exposure import demo
+
+        with connect() as conn:
+            if args.command == "demo":
+                demo.demo(conn, connect, blobs)
+            else:
+                demo.bench(conn, blobs, rounds=args.rounds)
         return 0
 
     from quakeexposure.ingestion.collector import Collector, run_forever
@@ -114,4 +160,24 @@ def _watch(action: str, event_id: str | None) -> int:
                 "SELECT provider_event_id FROM control.watchlist ORDER BY 1"
             ):
                 print(eid)
+    return 0
+
+
+def _explain(args: argparse.Namespace) -> int:
+    from quakeexposure.db import connect
+    from quakeexposure.exposure.explain import diff, format_diff, publications
+
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT earthquake_uid FROM quake.alias WHERE stream_scope = %s AND provider_id = %s",
+            (args.scope, args.event_id),
+        ).fetchone()
+        if row is None:
+            print(f"evento {args.event_id} não encontrado no escopo {args.scope}", file=sys.stderr)
+            return 1
+        current, previous = publications(conn, args.tenant, row[0], args.scope, args.mode)
+        if current is None:
+            print("sem publicação para este evento, tenant e modo", file=sys.stderr)
+            return 1
+        print(format_diff(diff(conn, previous, current)))
     return 0

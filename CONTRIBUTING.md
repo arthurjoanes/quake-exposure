@@ -17,6 +17,11 @@ docker compose exec collector qe status
 docker compose exec collector qe replay
 docker compose exec collector qe backfill --from 2026-10-01 --to 2026-10-07
 docker compose exec collector qe watch add <eventid>
+docker compose exec worker qe portfolio seed       # carteira fictícia (carga direta)
+docker compose exec worker qe demo
+docker compose exec worker qe explain <eventid> --tenant <t> --mode <m> --scope <s>
+docker compose exec worker qe bench --rounds 10    # precisa do worker rodando
+cd web && npm ci && npm test && npm run build      # página: TS strict + Vite + Leaflet
 uv run python scripts/fetch_fixtures.py pull      # grids de outras redes, fora do Git
 uv run python scripts/fetch_fixtures.py capture   # recaptura tudo (requisições reais ao USGS)
 ```
@@ -112,4 +117,16 @@ Código em `ingestion/`: `http.py` (cliente), `collector.py` (agenda e tarefas),
 - Detail é sempre gravado e projetado (o mesmo detail pode valer de novo). Detail mais velho que a revisão que o pediu (cache) não fecha o pedido; conta tentativa.
 - Cada feature roda num savepoint. Erro de dado vai para a quarentena do item (revision_id, ou sha256 da feature) uma vez só; conflito de versão e erro não voltam ao domínio, conflito de alias volta. Erro do ambiente (timeout, lock, deadlock, disco, conexão) deixa a captura pendente e não avança watermark nem cursor.
 - Pedidos de detail e grids com falha transitória têm limite de 5 tentativas; o `qe status` mostra os desistidos.
+
+## Cálculo e publicação
+
+Código em `exposure/`: `jobs.py` (escopo e marcação), `worker.py` (cálculo e CAS), `explain.py`. Carteira em `portfolio/`. API em `api/`, página em `web/`.
+
+- Escopo: LIVE calcula eventos com ShakeMap dos últimos 7 dias e a watchlist; REPLAY e FAULT, todos. Evento de tipo fora da regra é ingerido sem cálculo.
+- O marcador (`jobs.mark`) calcula o vetor de entrada de cada (tenant, evento, escopo, modo) e sobe `desired_generation` quando o `calculation_id` desejado muda. MMI sem detail ainda, ou com mapa escolhido e grid ainda não baixado, fica sem job até chegar.
+- O worker pega o job com `FOR UPDATE SKIP LOCKED` e uma lease de 2 min, carrega o grid antes da transação e faz tudo numa transação: as-of da carteira (domínio), `ST_DWithin` em geography (RADIUS) ou amostragem do grid (MMI), fatos, resumo por moeda, CAS em `desired_generation` e troca de `serving.current_publication`. Geração mudou durante o cálculo: nada é publicado e o job volta para a fila.
+- `calculation_id` = `publication_id`. A mesma entrada não gera cálculo nem publicação nova.
+- Evento retirado publica RETRACTED; fundido ou fora da regra sai de `serving.current_publication` (linha nula em `serving.publication_log`).
+- Fatos e serving nunca têm `subject_token`; o papel `qe_api_read` não lê `portfolio.asset_revision`.
+- Página: mapa e valores sempre da mesma publicação; dinheiro só como string.
 
