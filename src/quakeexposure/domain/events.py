@@ -74,7 +74,9 @@ def revision_from_feature(feature: Mapping[str, Any]) -> EventRevision:
         depth_km=None if depth is None else _number(depth),
         time=from_epoch_ms(props["time"]),
         mag=None if props["mag"] is None else _number(props["mag"]),
-        event_type=props["type"] or None,
+        # evento deletado às vezes vem com type vazio e às vezes não, para o mesmo `updated`
+        # (coleção do FDSN x consulta por eventid): ali o tipo não entra no hash
+        event_type=None if props["status"] == "deleted" else props["type"] or None,
         status=props["status"],
         ids=_csv(props["ids"]) | {feature["id"]},
         types=_csv(props["types"]),

@@ -51,7 +51,7 @@ Revisões de evento (`domain/events.py`, `domain/canonical.py`):
 - `revision_id` = SHA-256 do JSON canônico de `[provider_event_id, source_updated_at, semantic_sha256]`.
 - JSON canônico: chaves ordenadas, separadores compactos, UTF-8, instantes em ISO 8601 UTC com milissegundos.
 - Mesma `revision_id`: duplicata, sem efeito. Mesmo `source_updated_at` com conteúdo diferente: quarentena. `source_updated_at` mais antigo que o atual: só histórico.
-- Números normalizados antes do hash (`5` e `5.0`, `-0.0` e `0.0` dão o mesmo hash); `type` vazio vira nulo.
+- Números normalizados antes do hash (`5` e `5.0`, `-0.0` e `0.0` dão o mesmo hash); `type` vazio vira nulo. Em evento deletado o `type` é sempre nulo: o USGS manda vazio ou não para o mesmo `updated`.
 - `status = deleted` vira RETRACTED e invalida as publicações do evento. Ausência no `all_day` não é retirada. 409 no detail leva a uma reconsulta por `eventid` com `includedeleted=true`.
 - Sem filtro por magnitude ou tipo na ingestão; `event_type` diferente de `earthquake` sai do cálculo pela regra. `mag`, `depth`, `type` e `types` podem vir nulos ou vazios. Coordenadas sempre lon, lat.
 
@@ -107,5 +107,9 @@ Código em `ingestion/`: `http.py` (cliente), `collector.py` (agenda e tarefas),
 - Falha de rede aparece como fonte desatualizada, nunca como ausência de terremotos.
 - Agenda: feed a cada 60 s; detail quando o `updated` muda e o evento tem ShakeMap (ou já tinha mapa); grid só do produto escolhido de evento dos últimos 7 dias ou da watchlist; incremental FDSN a cada 600 s com `includedeleted=true`, watermark só avança se a consulta terminar, janela dividida ao meio se o FDSN recusar por excesso.
 - Captura: blob gravado (temporário, fsync, rename) antes da linha em `control.capture`. O feed só vira captura se trouxer revisão nova. A projeção roda logo depois, em outra transação; erro vai para `control.quarantine` (motivo e hash, sem payload).
-- 409, 404 ou 410 no detail: reconsulta por `eventid` com `includedeleted=true`. Conflito de alias vindo do feed ou do FDSN: reconsulta dos ids envolvidos.
+- 409, 404 ou 410 no detail: reconsulta por `eventid` com `includedeleted=true`.
+- Conflito de alias: reconsulta uma vez, nesta ordem: o dono do id disputado, o id e a revisão. A revisão parada fica em `control.alias_conflict`; quando outra revisão solta o id, ela é reconsultada.
+- Detail é sempre gravado e projetado (o mesmo detail pode valer de novo). Detail mais velho que a revisão que o pediu (cache) não fecha o pedido; conta tentativa.
+- Cada feature roda num savepoint. Erro de dado vai para a quarentena do item (revision_id, ou sha256 da feature) uma vez só; conflito de versão e erro não voltam ao domínio, conflito de alias volta. Erro do ambiente (timeout, lock, deadlock, disco, conexão) deixa a captura pendente e não avança watermark nem cursor.
+- Pedidos de detail e grids com falha transitória têm limite de 5 tentativas; o `qe status` mostra os desistidos.
 
