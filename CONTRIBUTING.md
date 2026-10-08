@@ -49,9 +49,12 @@ Revisões de evento (`domain/events.py`, `domain/canonical.py`):
 
 Identidade (`domain/aliases.py`):
 
-- `earthquake_uid` por evento, seguindo o `ids` da revisão mais recente. Revisão antiga não mexe no mapeamento.
-- Revisão cujo `ids` contém o id preferido de outro uid funde os dois: fica o uid que já tinha o id preferido da revisão, o outro vira `merged_into` e tem as publicações invalidadas. Cada fusão ou separação grava uma linha em `event_alias_revision`.
-- Revisão que divide com outro uid um id que não é o preferido dele, ou fusão com informação mais velha que a do uid absorvido: quarentena e reconsulta por `eventid`. Um id nunca fica em dois conjuntos atuais.
+- `earthquake_uid` por evento. A identidade sai só dos conjuntos atuais (o `ids` da revisão mais recente de cada uid ativo), nunca do histórico.
+- Mesma `revision_id` em qualquer histórico: duplicata. Mesmo id e mesmo `updated` com outro conteúdo: quarentena.
+- Revisão que não é mais nova que nenhum dos uids que toca: só histórico, o mapeamento não muda.
+- Revisão mais nova que todos: se o `ids` contém o id preferido de outro uid, os dois se fundem (fica o uid que já tinha o id preferido da revisão; o outro vira `merged_into` e tem as publicações invalidadas). Cada fusão ou separação grava uma linha em `event_alias_revision`.
+- Quarentena e reconsulta por `eventid`: revisão que divide com outro uid um id que não é o preferido dele, ou que é mais nova que uns uids e mais velha que outros. Um id nunca fica em dois conjuntos atuais.
+- O `Catalog` passado ao `ingest` precisa trazer os uids que a revisão toca, com os históricos, os históricos com a mesma `revision_id` ou o mesmo id e `updated`, e a cadeia `merged_into` deles.
 - Nunca juntar eventos por distância ou tempo: réplicas são eventos distintos.
 
 ShakeMap (`domain/shakemap.py`):

@@ -49,7 +49,7 @@ class InputVector:
     rule_version: str
 
     def __post_init__(self) -> None:
-        if self.mode is Mode.RADIUS_TRIAGE and self.product_revision_id is not None:
+        if self.mode == Mode.RADIUS_TRIAGE and self.product_revision_id is not None:
             raise ValueError("RADIUS_TRIAGE não usa ShakeMap: product_revision_id deve ser None")
 
     def to_json(self) -> dict[str, Any]:
@@ -156,7 +156,7 @@ def without_values(
     vector: InputVector, status: ResultStatus, calculated_at: datetime
 ) -> ExposureResult:
     """NO_MAP, UNSUPPORTED_GRID, RETRACTED e REDACTED_BY_ERASURE: contagens e valores nulos."""
-    if status is ResultStatus.COMPLETE:
+    if status == ResultStatus.COMPLETE:
         raise ValueError("COMPLETE sai de summarize()")
     return ExposureResult(
         vector, status, None, None, None, calculated_at, (*LIMITATIONS[vector.mode], status)

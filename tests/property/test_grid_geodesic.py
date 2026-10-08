@@ -1,4 +1,4 @@
-"""F14: o nó escolhido pelo índice é o mais próximo pelo geographiclib (WGS84).
+"""F14: o nó escolhido pelo índice fica a menos de 1 m do mais próximo pelo geographiclib (WGS84).
 
 Grid sintético em latitude alta (71° a 72°), cruzando o antimeridiano (179° a 181°).
 """
