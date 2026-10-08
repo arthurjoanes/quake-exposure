@@ -10,6 +10,7 @@ Os passos 3 (CDC) e 5 (exclusão de titular) entram com o CDC e a exclusão.
 import gzip
 import hashlib
 import json
+import random
 import statistics
 import time
 from collections.abc import Callable
@@ -43,17 +44,17 @@ def demo(
     out("1. replay da captura real e cálculo inicial")
     done = replay(conn, blobs, now())
     out(f"   capturas gravadas {done.stored}, já existiam {done.already}")
-    worker.run_pending(conn, blobs, now)
+    _drain(conn, blobs, now)
     _summary(conn, "REPLAY", out)
 
     out("2. revisão FAULT que muda a exposição")
     detail, grid = _fixture("detail_us7000tiur"), _fixture("grid_us7000tiur")
     _fault_base(conn, blobs, detail, grid, now())
-    worker.run_pending(conn, blobs, now)
+    _drain(conn, blobs, now)
     before = _current(conn)
     moved = shifted(detail, dlon=0.5, updated=_next_updated(conn, detail))
     _fault(conn, blobs, detail, moved, now())
-    worker.run_pending(conn, blobs, now)
+    _drain(conn, blobs, now)
     after = _current(conn)
     for key, calc in after.items():
         if key[3] != Mode.RADIUS_TRIAGE:
@@ -64,25 +65,28 @@ def demo(
     _summary(conn, "FAULT", out)
     out("   a mesma captura de novo:")
     _fault(conn, blobs, detail, moved, now())
-    worker.run_pending(conn, blobs, now)
+    _drain(conn, blobs, now)
     same = _current(conn) == after
     out("   revisão duplicada, nenhum cálculo novo; publication_id igual: "
         + ("sim" if same else "NÃO"))  # fmt: skip
 
     out("4. job velho recusado pela geração")
-    step4 = shifted(detail, dlon=1.0, updated=_next_updated(conn, detail))
-    _fault(conn, blobs, detail, step4, now())
-    jobs.mark(conn, now())
     tenant = portfolio.tenants(conn)[0].tenant_id
     uid = _fault_uid(conn)
-    job = worker.claim(conn, now(), key=(tenant, uid, "FAULT", Mode.RADIUS_TRIAGE))
+    job = None
+    for n in range(5):  # o worker do Compose pode pegar o job antes: outra revisão
+        step4 = shifted(detail, dlon=1.0 + n / 10, updated=_next_updated(conn, detail))
+        _fault(conn, blobs, detail, step4, now())
+        jobs.mark(conn, now())
+        job = worker.claim(conn, now(), key=(tenant, uid, "FAULT", Mode.RADIUS_TRIAGE))
+        if job is not None:
+            break
     assert job is not None
     newest = shifted(detail, dlon=1.5, updated=_next_updated(conn, detail, extra=60))
 
     def new_revision_during_calculation() -> None:
         with other() as second:
-            _fault(second, blobs, detail, newest, now())
-            jobs.mark(second, now())
+            _fault(second, blobs, detail, newest, now())  # a projeção sobe a geração
 
     result = worker.run(conn, blobs, job, now, before_commit=new_revision_during_calculation)
     generation = conn.execute(
@@ -93,7 +97,7 @@ def demo(
     assert generation is not None
     out(f"   cálculo da geração {job.generation}: {'recusado' if result == 'stale' else result};"
         f" geração atual {generation[0]}")  # fmt: skip
-    worker.run_pending(conn, blobs, now)
+    _drain(conn, blobs, now)
     published = conn.execute(
         """SELECT generation FROM serving.current_publication WHERE tenant_id = %s
            AND earthquake_uid = %s AND stream_scope = 'FAULT' AND mode = %s""",
@@ -118,7 +122,10 @@ def bench(
     times = []
     for n in range(rounds):
         before = _current(conn)
-        revision = shifted(detail, dlon=0.1 * (n + 1), updated=_next_updated(conn, detail))
+        # posição nova a cada rodada: com uma posição já vista, o cálculo já existe e só a
+        # publicação seria medida
+        dlon = random.uniform(-0.45, 0.45)  # noqa: S311
+        revision = shifted(detail, dlon=dlon, updated=_next_updated(conn, detail))
         _fault(conn, blobs, detail, revision, datetime.now(UTC))
         applied = time.monotonic()
         expected = 2 * len(portfolio.tenants(conn))
@@ -133,7 +140,10 @@ def bench(
         elapsed = time.monotonic() - applied
         times.append(elapsed)
         out(f"rodada {n + 1}: {elapsed:.2f} s até as {expected} publicações")
-    out(f"mediana {statistics.median(times):.2f} s, máximo {max(times):.2f} s")
+    out(
+        f"mediana {statistics.median(times):.2f} s, máximo {max(times):.2f} s,"
+        f" mínimo {min(times):.2f} s"
+    )
     return times
 
 
@@ -158,6 +168,22 @@ def _fixture(name: str) -> bytes:
         e for e in json.loads(MANIFEST.read_text("utf-8"))["fixtures"] if e["name"] == name
     )
     return gzip.decompress((MANIFEST.parent / entry["path"]).read_bytes())
+
+
+def _drain(conn: Conn, blobs: BlobStore, now: Callable[[], datetime], timeout: float = 120) -> None:
+    """Roda o worker até a fila esvaziar. Com o worker do Compose no ar, ele pode pegar parte dos
+    jobs: aqui também se espera por esses."""
+    deadline = time.monotonic() + timeout
+    while True:
+        worker.run_pending(conn, blobs, now)
+        row = conn.execute(
+            """SELECT count(*) FROM control.exposure_job
+               WHERE desired_generation > published_generation AND attempts < %s""",
+            (worker.MAX_ATTEMPTS,),
+        ).fetchone()
+        if row is None or row[0] == 0 or time.monotonic() > deadline:
+            return
+        time.sleep(0.2)
 
 
 def _fault_base(conn: Conn, blobs: BlobStore, detail: bytes, grid: bytes, at: datetime) -> None:

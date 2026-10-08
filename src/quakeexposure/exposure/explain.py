@@ -64,16 +64,32 @@ def calculation(conn: Conn, calculation_id: str) -> dict[str, Any] | None:
 def publications(
     conn: Conn, tenant_id: str, uid: UUID, scope: str, mode: str
 ) -> tuple[str | None, str | None]:
-    """(calculation_id atual, anterior) pelo histórico de trocas."""
-    rows = conn.execute(
+    """(calculation_id atual, anterior). Atual None: sem publicação ou retirada."""
+    row = conn.execute(
         """SELECT calculation_id FROM serving.publication_log
            WHERE tenant_id = %s AND earthquake_uid = %s AND stream_scope = %s AND mode = %s
-           ORDER BY publication_seq DESC LIMIT 2""",
+           ORDER BY publication_seq DESC LIMIT 1""",
         (tenant_id, uid, scope, mode),
-    ).fetchall()
-    current = rows[0][0] if rows else None
-    previous = rows[1][0] if len(rows) > 1 else None
-    return current, previous
+    ).fetchone()
+    current = row[0] if row else None
+    return current, previous(conn, current) if current else None
+
+
+def previous(conn: Conn, calculation_id: str) -> str | None:
+    """A última publicação da mesma chave antes desta, com outro cálculo. Retiradas no meio
+    (fusão, tipo fora da regra) não contam: o antes é o último cálculo publicado."""
+    row = conn.execute(
+        """SELECT l.calculation_id FROM serving.publication_log l
+           JOIN exposure.calculation c ON c.calculation_id = %(id)s
+           WHERE (l.tenant_id, l.earthquake_uid, l.stream_scope, l.mode)
+                 = (c.tenant_id, c.earthquake_uid, c.stream_scope, c.mode)
+             AND l.calculation_id IS NOT NULL AND l.calculation_id <> %(id)s
+             AND l.publication_seq < (SELECT max(publication_seq) FROM serving.publication_log
+                                      WHERE calculation_id = %(id)s)
+           ORDER BY l.publication_seq DESC LIMIT 1""",
+        {"id": calculation_id},
+    ).fetchone()
+    return row[0] if row else None
 
 
 def diff(conn: Conn, before: str | None, after: str) -> dict[str, Any]:

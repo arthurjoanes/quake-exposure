@@ -18,7 +18,7 @@ import {
   type Scope,
   type Tenant,
 } from "./api";
-import { planar } from "./basemap";
+import { near, planar } from "./basemap";
 import { formatMinor } from "./money";
 import { PublicationSync } from "./publication";
 
@@ -92,6 +92,7 @@ L.geoJSON(landGeometry, {
 const assetRenderer = L.canvas({ pane: "assets" });
 const assetLayer = L.layerGroup().addTo(map);
 const eventLayer = L.layerGroup().addTo(map);
+map.on("moveend", () => drawEvents()); // eventos perto de ±180 seguem a cópia que está na tela
 
 // ---------- formatação ----------
 
@@ -137,10 +138,11 @@ function renderEventOptions(): void {
 
 function drawEvents(): void {
   eventLayer.clearLayers();
+  const center = map.getCenter().lng;
   for (const e of state.events) {
     const selected = e.earthquake_uid === state.uid;
     const retracted = e.lifecycle === "RETRACTED";
-    L.circleMarker([e.lat, e.lon], {
+    L.circleMarker([e.lat, near(e.lon, center)], {
       radius: 4 + Math.max(0, e.mag ?? 0) * 1.5,
       color: selected ? "#000" : COLOR.event,
       weight: selected ? 3 : 1.5,
@@ -200,6 +202,8 @@ interface View {
 /** Monta tudo antes de tocar na tela: se algum valor for inválido, nada muda. */
 function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffResponse): View {
   const r = pub.result;
+  const event = state.events.find((e) => e.earthquake_uid === r.input_vector.earthquake_uid);
+  const center = event?.lon ?? map.getCenter().lng;
   const totals = r.qualifying_value_minor;
   const summary = `
     <h2>Publicação ${scopeBadge(r.input_vector.stream_scope)}</h2>
@@ -262,7 +266,7 @@ function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffRespon
     const k = rank(a);
     const tip = `${a.asset_id} · ${formatMinor(a.insured_value_minor, a.currency)}` +
       (a.mmi === null ? "" : ` · MMI ${num(a.mmi, 2)}`) + ` · ${situation[k]}`;
-    return L.circleMarker([a.lat, a.lon], {
+    return L.circleMarker([a.lat, near(a.lon, center)], {
       renderer: assetRenderer,
       radius: k === 0 ? 4 : 3,
       weight: 0,
@@ -403,7 +407,7 @@ function selectEvent(uid: string): void {
   state.uid = uid;
   eventSel.value = uid;
   const e = state.events.find((x) => x.earthquake_uid === uid);
-  if (e) map.setView([e.lat, e.lon], Math.max(map.getZoom(), 6));
+  if (e) map.setView([e.lat, near(e.lon, map.getCenter().lng)], Math.max(map.getZoom(), 6));
   drawEvents();
   changed();
 }

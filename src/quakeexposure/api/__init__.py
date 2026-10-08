@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from quakeexposure.db import ROOT, connect
 from quakeexposure.domain.canonical import iso_ms
-from quakeexposure.exposure.explain import calculation, diff
+from quakeexposure.exposure.explain import calculation, diff, previous
 from quakeexposure.ingestion.store import Conn
 from quakeexposure.status import report
 
@@ -42,7 +42,10 @@ def create_app(
         return [{"tenant_id": t, "name": n} for t, n in rows]
 
     @app.get("/api/events")
-    def list_events(conn: Db, scope: Scope = "LIVE", limit: int = 500) -> list[dict[str, Any]]:
+    def list_events(
+        conn: Db, scope: Scope = "LIVE", limit: Annotated[int, Query(ge=1, le=2000)] = 500
+    ) -> list[dict[str, Any]]:
+        """Os eventos com publicação vêm primeiro: o limite corta só os que não têm cálculo."""
         rows = conn.execute(
             """SELECT e.earthquake_uid, e.preferred_id, e.lifecycle, e.event_time, r.lon, r.lat,
                       r.depth_km, r.mag, r.event_type, r.source_updated_at, m.product_revision_id,
@@ -55,8 +58,12 @@ def create_app(
                LEFT JOIN quake.event_map m
                  ON m.stream_scope = e.stream_scope AND m.earthquake_uid = e.earthquake_uid
                WHERE e.stream_scope = %s AND e.merged_into IS NULL
-               ORDER BY e.event_time DESC LIMIT %s""",
-            (scope, min(limit, 2000)),
+               ORDER BY EXISTS (SELECT 1 FROM serving.current_publication p
+                                WHERE p.stream_scope = e.stream_scope
+                                  AND p.earthquake_uid = e.earthquake_uid) DESC,
+                        e.event_time DESC
+               LIMIT %s""",
+            (scope, limit),
         ).fetchall()
         return [
             {
@@ -147,20 +154,12 @@ def create_app(
     @app.get("/api/publications/{publication_id}/diff")
     def publication_diff(publication_id: str, tenant: str, conn: Db) -> dict[str, Any]:
         """Antes e depois: a publicação anterior desta mesma chave e o que mudou."""
-        key = _own(conn, publication_id, tenant)
-        previous = conn.execute(
-            """SELECT calculation_id FROM serving.publication_log
-               WHERE tenant_id = %s AND earthquake_uid = %s AND stream_scope = %s AND mode = %s
-                 AND calculation_id IS NOT NULL AND calculation_id <> %s
-                 AND publication_seq < (SELECT max(publication_seq) FROM serving.publication_log
-                                        WHERE calculation_id = %s)
-               ORDER BY publication_seq DESC LIMIT 1""",
-            (*key, publication_id, publication_id),
-        ).fetchone()
-        d = diff(conn, previous[0] if previous else None, publication_id)
+        _own(conn, publication_id, tenant)
+        before = previous(conn, publication_id)
+        d = diff(conn, before, publication_id)
         return {
             "publication_id": publication_id,
-            "previous_publication_id": previous[0] if previous else None,
+            "previous_publication_id": before,
             "causes": d["causes"],
             "entered": d["entered"],
             "left": d["left"],

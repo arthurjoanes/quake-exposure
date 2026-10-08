@@ -37,3 +37,8 @@ export function planar(polygons: Polygon[]): Polygon[] {
   }
   return out;
 }
+
+/** A cópia da longitude mais perto de `center`: ponto do outro lado de ±180 fica ao lado. */
+export function near(lon: number, center: number): number {
+  return lon + 360 * Math.round((center - lon) / 360);
+}

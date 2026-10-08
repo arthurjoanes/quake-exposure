@@ -2,12 +2,14 @@
 
 Medido em 2026-10-08 com `qe bench --rounds 10`, com a pilha do `compose.yaml` no ar (worker, API, PostGIS) e a carteira sintética de 10.000 ativos (2 tenants com 5.000 cada, `qe portfolio seed`, seed 42).
 
-Cada rodada grava uma revisão FAULT nova de `us7000tiur` (epicentro deslocado; mesmo grid de 201 × 202 nós) e mede até as 4 publicações (2 tenants × 2 modos) trocarem em `serving.current_publication`. O tempo inclui a espera do worker, que olha a fila a cada 1 s.
+Cada rodada grava uma revisão FAULT nova de `us7000tiur` (epicentro deslocado para uma posição sorteada, sempre nova, para o cálculo não existir ainda; mesmo grid de 201 × 202 nós) e mede até as 4 publicações (2 tenants × 2 modos) trocarem em `serving.current_publication`. O tempo inclui a espera do worker, que olha a fila a cada 1 s.
 
 | Medida | Mediana | Máximo | Mínimo |
 |---|---:|---:|---:|
-| revisão aplicada → 4 publicações, com o worker do Compose | 1,51 s | 1,51 s | 1,01 s |
-| só marcação + 4 cálculos e publicações, sem a espera (10 rodadas) | 0,33 s | 0,55 s | 0,14 s |
+| revisão aplicada → 4 publicações, com o worker do Compose | 1,56 s | 1,61 s | 1,01 s |
+| só marcação + 4 cálculos e publicações, sem a espera (10 rodadas, worker do Compose parado) | 0,60 s | 0,67 s | 0,56 s |
+
+A primeira medição deste milestone (1,51 s e 0,33 s de mediana) repetia posições de rodadas anteriores: parte dos cálculos já existia e só a publicação era medida. Os números acima são da versão que sorteia a posição.
 
 Cada cálculo: as-of da carteira do tenant (5.000 ativos), `ST_DWithin` em geography no modo RADIUS ou amostragem do grid no modo MMI, 5.000 fatos gravados por `COPY`, resumo por moeda e troca da publicação, numa transação.
 
@@ -24,3 +26,5 @@ docker compose up -d --build worker api
 docker compose exec worker qe portfolio seed
 docker compose exec worker qe bench --rounds 10
 ```
+
+A segunda linha mede só a chamada `worker.run_pending` depois de cada revisão FAULT, com o serviço `worker` parado (`docker compose stop worker`) e o mesmo deslocamento sorteado.

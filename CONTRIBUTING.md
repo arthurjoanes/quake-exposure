@@ -124,8 +124,11 @@ Código em `exposure/`: `jobs.py` (escopo e marcação), `worker.py` (cálculo e
 
 - Escopo: LIVE calcula eventos com ShakeMap dos últimos 7 dias e a watchlist; REPLAY e FAULT, todos. Evento de tipo fora da regra é ingerido sem cálculo.
 - O marcador (`jobs.mark`) calcula o vetor de entrada de cada (tenant, evento, escopo, modo) e sobe `desired_generation` quando o `calculation_id` desejado muda. MMI sem detail ainda, ou com mapa escolhido e grid ainda não baixado, fica sem job até chegar.
+- A projeção sobe `desired_generation` dos jobs do evento na mesma transação em que grava a revisão ou os produtos (`jobs.touch`). É isso que faz o CAS recusar um cálculo em andamento. Quem mudar entrada de cálculo (no M4, o CDC da carteira) faz o mesmo.
+- Job cujo vetor já não bate com o estado é acertado pelo worker na hora (vetor novo e geração nova, ou em dia se não há vetor). Por isso evento com job acompanha retirada e mapa que some mesmo fora do escopo.
 - O worker pega o job com `FOR UPDATE SKIP LOCKED` e uma lease de 2 min, carrega o grid antes da transação e faz tudo numa transação: as-of da carteira (domínio), `ST_DWithin` em geography (RADIUS) ou amostragem do grid (MMI), fatos, resumo por moeda, CAS em `desired_generation` e troca de `serving.current_publication`. Geração mudou durante o cálculo: nada é publicado e o job volta para a fila.
 - `calculation_id` = `publication_id`. A mesma entrada não gera cálculo nem publicação nova.
+- `/api/events` traz primeiro os eventos com publicação; o limite (até 2.000) corta só os sem cálculo.
 - Evento retirado publica RETRACTED; fundido ou fora da regra sai de `serving.current_publication` (linha nula em `serving.publication_log`).
 - Fatos e serving nunca têm `subject_token`; o papel `qe_api_read` não lê `portfolio.asset_revision`.
 - Página: mapa e valores sempre da mesma publicação; dinheiro só como string.

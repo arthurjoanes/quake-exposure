@@ -1,9 +1,13 @@
-"""Escopo de cálculo (§4.6) e marcação de jobs: o vetor desejado de cada (tenant, evento, escopo,
+"""Escopo de cálculo e marcação de jobs: o vetor desejado de cada (tenant, evento, escopo,
 modo). Quando o vetor muda, a geração desejada sobe; o worker publica o que estiver atrasado.
 
 LIVE: eventos com ShakeMap dos últimos 7 dias e a watchlist. REPLAY e FAULT: todos.
+
+Evento que já tem job acompanha as próprias mudanças mesmo fora do escopo (retirada, mapa que
+some): a projeção sobe a geração (`touch`) e o worker acerta o vetor.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -106,6 +110,16 @@ def vector_for(t: Target, tenant: Tenant, mode: Mode, rule: Rule) -> InputVector
         mode=mode,
         privacy_epoch=tenant.privacy_epoch,
         rule_version=rule.version,
+    )
+
+
+def touch(conn: Conn, scope: str, uids: Iterable[UUID]) -> None:
+    """A entrada destes eventos mudou: a geração sobe na transação de quem mudou, e o CAS recusa
+    o cálculo que estiver em andamento."""
+    conn.execute(
+        """UPDATE control.exposure_job SET desired_generation = desired_generation + 1
+           WHERE stream_scope = %s AND earthquake_uid = ANY(%s)""",
+        (scope, list(uids)),
     )
 
 
