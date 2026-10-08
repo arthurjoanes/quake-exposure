@@ -1,23 +1,23 @@
 """Projeção: das capturas gravadas para revisões, aliases, ShakeMaps e grids.
 
-Roda logo depois da captura, em outra transação. Um erro inesperado manda a captura para a
-quarentena (motivo e hash, sem payload); captura não projetada é retomada no ciclo seguinte.
+Roda logo depois da captura, em outra transação. Cada feature tem o seu savepoint: erro numa
+feature vai para a quarentena (motivo e hash, sem payload) e o resto segue. Erro transitório
+do banco deixa a captura pendente para o ciclo seguinte.
 """
 
 import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 import psycopg
 
 from quakeexposure.contracts import EVENT, SHAKEMAP, first_error
-from quakeexposure.domain.aliases import ingest
-from quakeexposure.domain.canonical import canonical_json
-from quakeexposure.domain.events import Outcome, revision_from_feature
+from quakeexposure.domain.aliases import AliasKind, ingest
+from quakeexposure.domain.events import EventRevision, Outcome, revision_from_feature
 from quakeexposure.domain.grid import UnsupportedGrid, parse_grid
 from quakeexposure.ingestion import store
 from quakeexposure.ingestion.blobs import BlobStore
@@ -26,6 +26,13 @@ from quakeexposure.ingestion.store import Conn
 log = logging.getLogger(__name__)
 
 FDSN_QUERY_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+# espera de lock, timeout, deadlock: a captura volta no próximo ciclo
+TRANSIENT = (
+    psycopg.errors.QueryCanceled,
+    psycopg.errors.LockNotAvailable,
+    psycopg.errors.DeadlockDetected,
+    psycopg.errors.SerializationFailure,
+)
 
 
 def reconsult_url(event_id: str) -> str:
@@ -46,10 +53,35 @@ class Capture:
 class Projected:
     new_revisions: int = 0
     quarantined: int = 0
+    status: str = "OK"
 
 
 def feature_sha256(feature: Any) -> str:
-    return hashlib.sha256(canonical_json(feature)).hexdigest()
+    # json.dumps aceita NaN: o hash do item não pode falhar no item que está quebrado
+    text = json.dumps(feature, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def revision_of(feature: Any) -> EventRevision | None:
+    """A revisão, se a feature passa no contrato e tem forma canônica (sem NaN, data válida)."""
+    if not EVENT.is_valid(feature):
+        return None
+    try:
+        rev = revision_from_feature(feature)
+        rev.revision_id  # noqa: B018 (calcula o hash agora: NaN e afins falham aqui)
+    except ValueError, OverflowError, TypeError:
+        return None
+    return rev
+
+
+def item_of(feature: Any) -> str:
+    """Chave na quarentena: revision_id se a feature é válida, senão o sha256 dela."""
+    rev = revision_of(feature)
+    return rev.revision_id if rev else feature_sha256(feature)
+
+
+def is_transient(conn: Conn, exc: BaseException) -> bool:
+    return conn.broken or conn.closed or isinstance(exc, TRANSIENT)
 
 
 def project_pending(conn: Conn, blobs: BlobStore, now: datetime) -> Projected:
@@ -79,8 +111,8 @@ def project_capture(conn: Conn, blobs: BlobStore, capture: Capture, now: datetim
             _mark(conn, capture, "OK", now)
         return result
     except Exception as exc:
-        if conn.broken or conn.closed:
-            raise  # banco fora do ar: a captura fica pendente e volta no próximo ciclo
+        if is_transient(conn, exc):
+            raise  # a captura fica pendente e volta no próximo ciclo
         log.exception("captura %d em quarentena", capture.capture_id)
         with conn.transaction():
             store.quarantine(
@@ -88,7 +120,7 @@ def project_capture(conn: Conn, blobs: BlobStore, capture: Capture, now: datetim
                 capture.sha256,
             )  # fmt: skip
             _mark(conn, capture, "QUARANTINED", now)
-        return Projected(quarantined=1)
+        return Projected(quarantined=1, status="QUARANTINED")
 
 
 def describe(exc: BaseException) -> str:
@@ -124,18 +156,12 @@ def _project(conn: Conn, capture: Capture, body: bytes, now: datetime) -> Projec
         return Projected()
 
     doc = json.loads(body)
-    features = doc["features"] if doc.get("type") == "FeatureCollection" else [doc]
-    items = [
-        revision_from_feature(f).revision_id if EVENT.is_valid(f) else feature_sha256(f)
-        for f in features
-    ]
+    collection = doc.get("type") == "FeatureCollection"
+    features = doc["features"] if collection else [doc]
+    items = [item_of(f) for f in features]
     # o feed repete quase tudo a cada minuto: só passa pelo domínio o que é novo. Um detail
     # (Feature só) passa sempre: a revisão costuma ser a mesma do feed e os produtos, não
-    known = (
-        store.known_revisions(conn, capture.scope, items)
-        if doc.get("type") == "FeatureCollection"
-        else set()
-    )
+    known = store.known_revisions(conn, capture.scope, items) if collection else set()
     prior = store.quarantine_reasons(conn, capture.scope, items)
     result = Projected()
     retry = []
@@ -170,15 +196,18 @@ def _project_feature(
     """
     if item in prior and not prior[item].startswith(Outcome.ALIAS_CONFLICT):
         return None
-    error = first_error(EVENT, feature)
+    rev = revision_of(feature)
     outcome: Outcome | None = None
-    reason: str | None = f"contract: {error}" if error else None
-    if not error:
+    reason: str | None = None
+    if rev is None:
+        error = first_error(EVENT, feature)
+        reason = f"contract: {error}" if error else "contract: sem forma canônica"
+    else:
         try:
             with conn.transaction():
-                outcome, reason = _ingest_feature(conn, capture, feature, item in prior, now)
+                outcome, reason = _ingest(conn, capture, feature, rev, item in prior, now)
         except Exception as exc:
-            if conn.broken or conn.closed:
+            if is_transient(conn, exc):
                 raise
             log.exception("feature %s em quarentena", item)
             outcome, reason = None, f"projection: {describe(exc)}"
@@ -191,24 +220,40 @@ def _project_feature(
     return outcome
 
 
-def _ingest_feature(
-    conn: Conn, capture: Capture, feature: Any, seen_before: bool, now: datetime
+def _ingest(
+    conn: Conn,
+    capture: Capture,
+    feature: Any,
+    rev: EventRevision,
+    seen_before: bool,
+    now: datetime,
 ) -> tuple[Outcome, str | None]:
-    rev = revision_from_feature(feature)
     catalog = store.load_catalog(conn, capture.scope, rev)
     _, ingested = ingest(catalog, rev, uuid4())
     store.apply_ingested(conn, capture.scope, rev, ingested, capture.capture_id)
     live = capture.scope == "LIVE"
-    if ingested.outcome in (Outcome.CONFLICT, Outcome.ALIAS_CONFLICT):
-        ids = f" ids={sorted(ingested.conflict_ids)}" if ingested.conflict_ids else ""
-        if live and ingested.outcome is Outcome.ALIAS_CONFLICT and not seen_before:
-            # reconsulta uma vez: a revisão, os ids disputados e o preferido de quem os tem
-            owners = store.preferred_ids_of(conn, capture.scope, ingested.conflict_ids)
-            for event_id in sorted({rev.provider_event_id, *ingested.conflict_ids, *owners}):
-                store.request_fetch(conn, event_id, reconsult_url(event_id), "alias", now)
-        return ingested.outcome, f"{ingested.outcome}{ids}"
-    if ingested.uid is None:
-        return ingested.outcome, None
+    if ingested.outcome is Outcome.ALIAS_CONFLICT:
+        disputed = sorted(ingested.conflict_ids)
+        if live and not seen_before:
+            store.add_alias_conflict(conn, capture.scope, rev, disputed)
+            # reconsulta uma vez, nesta ordem: quem tem os ids, os ids e por último a revisão
+            owners = store.preferred_ids_of(conn, capture.scope, disputed)
+            for step, ids in enumerate((owners, disputed, [rev.provider_event_id])):
+                for event_id in sorted(ids):
+                    store.request_fetch(
+                        conn, event_id, reconsult_url(event_id), "alias",
+                        now + timedelta(microseconds=step),
+                    )  # fmt: skip
+        return ingested.outcome, f"{ingested.outcome} ids={disputed}"
+    if ingested.outcome is Outcome.CONFLICT:
+        return ingested.outcome, str(ingested.outcome)
+    assert ingested.uid is not None
+    store.drop_alias_conflict(conn, capture.scope, rev)
+    released = {i for c in ingested.changes if c.kind is AliasKind.SPLIT for i in c.ids}
+    if live and released:
+        # ids soltos: quem estava parado esperando por eles é reconsultado
+        for event_id in store.alias_conflicts_on(conn, capture.scope, released):
+            store.request_fetch(conn, event_id, reconsult_url(event_id), "alias", now)
     if "products" in feature["properties"]:
         _store_products(conn, capture, ingested.uid, feature)
     elif (
@@ -224,22 +269,34 @@ def _ingest_feature(
 
 
 def _store_products(conn: Conn, capture: Capture, uid: Any, detail: dict[str, Any]) -> None:
+    """Produtos num savepoint próprio: erro aqui não segura a revisão do evento."""
     products = detail["properties"]["products"].get("shakemap", [])
-    bad = [p for p in products if not SHAKEMAP.is_valid(p)]
-    for p in bad:
-        if not store.quarantined(conn, capture.scope, feature_sha256(p)):
+    valid = []
+    for p in products:
+        error = first_error(SHAKEMAP, p)
+        if error is None:
+            valid.append(p)
+        elif not store.quarantined(conn, capture.scope, feature_sha256(p)):
             store.quarantine(
-                conn, capture.scope, capture.capture_id, f"contract: {first_error(SHAKEMAP, p)}",
-                feature_sha256(p),
-            )  # fmt: skip
-    if bad:
-        detail = {
-            **detail,
-            "properties": {
-                **detail["properties"],
-                "products": {**detail["properties"]["products"], "shakemap": [
-                    p for p in products if SHAKEMAP.is_valid(p)
-                ]},
-            },
-        }  # fmt: skip
-    store.store_detail_products(conn, capture.scope, uid, detail, capture.capture_id)
+                conn, capture.scope, capture.capture_id, f"contract: {error}", feature_sha256(p)
+            )
+    products_doc = {"products": detail["properties"]["products"]}
+    detail = {
+        **detail,
+        "properties": {
+            **detail["properties"],
+            "products": {**detail["properties"]["products"], "shakemap": valid},
+        },
+    }
+    try:
+        with conn.transaction():
+            store.store_detail_products(conn, capture.scope, uid, detail, capture.capture_id)
+    except Exception as exc:
+        if is_transient(conn, exc):
+            raise
+        log.exception("produtos do detail em quarentena")
+        sha = feature_sha256(products_doc)
+        if not store.quarantined(conn, capture.scope, sha):
+            store.quarantine(
+                conn, capture.scope, capture.capture_id, f"products: {describe(exc)}", sha
+            )

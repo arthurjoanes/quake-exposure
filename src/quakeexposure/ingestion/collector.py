@@ -13,8 +13,6 @@ from typing import Any
 
 import psycopg
 
-from quakeexposure.contracts import EVENT
-from quakeexposure.domain.events import revision_from_feature
 from quakeexposure.ingestion import store
 from quakeexposure.ingestion.blobs import BlobStore
 from quakeexposure.ingestion.http import (
@@ -33,6 +31,7 @@ from quakeexposure.ingestion.projection import (
     feature_sha256,
     project_pending,
     reconsult_url,
+    revision_of,
 )
 from quakeexposure.ingestion.store import Conn
 
@@ -86,7 +85,7 @@ class Collector:
     def poll_feed(self, now: datetime) -> None:
         try:
             new = self._take_collection("feed", self.client.get_json(FEED_URL))
-        except FetchError as exc:
+        except (FetchError, psycopg.Error) as exc:
             self._source_error("feed", now, exc)
             return
         self._source_ok("feed", now, new)
@@ -104,8 +103,8 @@ class Collector:
         }
         try:
             new = self._query_windows(params, now - HORIZON, now)
-        except FetchError as exc:
-            self._source_error("incremental", now, exc)
+        except (FetchError, psycopg.Error) as exc:
+            self._source_error("incremental", now, exc)  # o watermark fica onde estava
             return
         self._source_ok("incremental", now, new, watermark=now)
 
@@ -159,7 +158,7 @@ class Collector:
     def fetch_requested(self) -> None:
         rows = self.conn.execute(
             """SELECT provider_event_id, url FROM control.fetch_request
-               WHERE attempts < %s ORDER BY requested_at LIMIT %s""",
+               WHERE attempts < %s ORDER BY requested_at, provider_event_id LIMIT %s""",
             (MAX_REQUEST_ATTEMPTS, REQUESTS_PER_TICK),
         ).fetchall()
         for event_id, url in rows:
@@ -167,6 +166,8 @@ class Collector:
             try:
                 timeout = FDSN_READ_TIMEOUT if "/fdsnws/" in url else READ_TIMEOUT
                 fetched = self.client.get_json(url, read_timeout=timeout)
+                if not _is_feature(fetched.body):
+                    raise ContentRejected(f"{url}: resposta não é Feature", transient=True)
             except HttpStatusError as exc:
                 if exc.status in (404, 409, 410) and url != reconsult_url(event_id):
                     # deletado devolve 409: reconsulta por eventid com includedeleted=true
@@ -180,8 +181,8 @@ class Collector:
             except FetchError as exc:
                 self._request_failed(event_id, url, exc)
                 continue
-            if not store.captured(self.conn, "LIVE", fetched.sha256):
-                self._store("detail", fetched)
+            # grava sempre: o mesmo detail pode valer de novo (conflito resolvido, reconsulta)
+            self._store("detail", fetched)
             with self.conn.transaction():
                 self.conn.execute(
                     "DELETE FROM control.fetch_request WHERE provider_event_id = %s", (event_id,)
@@ -259,14 +260,22 @@ class Collector:
         if not self._has_news(doc):
             log.info("%s sem revisão nova (%d bytes)", kind, len(fetched.body))
             return 0
-        self._store(kind, fetched)
-        return project_pending(self.conn, self.blobs, self.clock()).new_revisions
+        capture_id = self._store(kind, fetched)
+        new = project_pending(self.conn, self.blobs, self.clock()).new_revisions
+        status = self.conn.execute(
+            "SELECT projection_status FROM control.capture WHERE capture_id = %s", (capture_id,)
+        ).fetchone()
+        if status is None or status[0] != "OK":
+            # a resposta não foi aplicada: não conta como sucesso (watermark e cursor ficam)
+            raise ContentRejected(f"{fetched.url}: projeção da captura {capture_id} falhou")
+        return new
 
     def _has_news(self, doc: dict[str, Any]) -> bool:
         ids = []
         for f in doc["features"]:
-            if EVENT.is_valid(f):
-                ids.append(revision_from_feature(f).revision_id)
+            rev = revision_of(f)
+            if rev is not None:
+                ids.append(rev.revision_id)
             elif not store.quarantined(self.conn, "LIVE", feature_sha256(f)):
                 return True  # a projeção põe na quarentena
         new = set(ids) - store.known_revisions(self.conn, "LIVE", ids)
@@ -310,6 +319,14 @@ class Collector:
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _is_feature(body: bytes) -> bool:
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return False
+    return isinstance(doc, dict) and doc.get("type") == "Feature"
 
 
 def _reason(exc: FetchError) -> str:
