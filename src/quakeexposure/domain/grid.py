@@ -15,6 +15,8 @@ from defusedxml.ElementTree import fromstring
 MAX_POINTS = 2_000_000
 # os valores do grid vêm com 4 casas
 COORD_TOLERANCE = 1e-4
+# folga de arredondamento do float (~0,1 mm): ativo exatamente na borda fica dentro
+EDGE_EPS = 1e-9
 
 
 class UnsupportedGrid(Exception):
@@ -25,7 +27,7 @@ class UnsupportedGrid(Exception):
 class Grid:
     lon_min: float
     lat_min: float
-    lon_max: float  # sempre >= lon_min; acima de 180 quando cruza o antimeridiano
+    lon_max: float  # sempre > lon_min; acima de 180 quando cruza o antimeridiano
     lat_max: float
     nlon: int
     nlat: int
@@ -33,10 +35,11 @@ class Grid:
 
     def mmi_at(self, lon: float, lat: float) -> float | None:
         """MMI do nó mais próximo; None fora da extensão."""
-        x = self.lon_min + (lon - self.lon_min) % 360.0
-        if not (self.lat_min <= lat <= self.lat_max and x <= self.lon_max):
+        offset = (lon - self.lon_min + EDGE_EPS) % 360.0 - EDGE_EPS
+        span = self.lon_max - self.lon_min
+        if not (self.lat_min <= lat <= self.lat_max and offset <= span + EDGE_EPS):
             return None
-        col = math.floor((x - self.lon_min) / self._lon_step + 0.5)
+        col = math.floor(offset / self._lon_step + 0.5)
         row = math.floor((self.lat_max - lat) / self._lat_step + 0.5)
         return self.mmi[row * self.nlon + col]
 
@@ -67,11 +70,11 @@ def parse_grid(data: bytes, *, max_points: int = MAX_POINTS) -> Grid:
         raise UnsupportedGrid(f"grid_specification inválido: {exc!r}") from exc
     if not all(map(math.isfinite, (lon_min, lat_min, lon_max, lat_max))):
         raise UnsupportedGrid("extensão com valor não finito")
-    if nlon < 2 or nlat < 2 or lat_max <= lat_min:
+    if nlon < 2 or nlat < 2 or lat_max <= lat_min or lon_max == lon_min:
         raise UnsupportedGrid(f"extensão degenerada: nlon={nlon} nlat={nlat}")
     if nlon * nlat > max_points:
         raise UnsupportedGrid(f"{nlon * nlat} pontos, acima de {max_points}")
-    if lon_max <= lon_min:
+    if lon_max < lon_min:
         lon_max += 360.0
 
     field_elements = [f for f in root if _local(f) == "grid_field"]

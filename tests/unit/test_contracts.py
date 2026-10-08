@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import MANIFEST
 from jsonschema import Draft202012Validator
 
 CONTRACTS = Path(__file__).parents[2] / "contracts"
@@ -34,7 +35,7 @@ def test_collection_features_follow_event_contract(
         assert errors(EVENT, feature) == [], feature["id"]
 
 
-@pytest.mark.parametrize("name", ["detail_us6000u0hy", "detail_aka2026tuxgky", "detail_us7000tiur"])
+@pytest.mark.parametrize("name", [e["name"] for e in MANIFEST if e["kind"] == "detail"])
 def test_detail_follows_contracts(name: str, usgs_json: Callable[[str], Any]) -> None:
     detail = usgs_json(name)
     assert errors(EVENT, detail) == []

@@ -24,9 +24,12 @@ NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
 Reply = Callable[[], httpx.Response]
 
 
-def reply(status: int = 200, body: bytes = b"{}", **headers: str) -> Reply:
+def reply(status: int = 200, body: bytes = b"{}", **headers: str | bytes) -> Reply:
     # stream= e não content=: com content= o httpx já lê o corpo e iter_raw() falha
-    names = {k.replace("_", "-"): v for k, v in headers.items()}
+    names = [
+        (k.replace("_", "-").encode(), v if isinstance(v, bytes) else v.encode())
+        for k, v in headers.items()
+    ]
     return lambda: httpx.Response(status, headers=names, stream=httpx.ByteStream(body))
 
 
@@ -204,3 +207,24 @@ def test_tests_cannot_reach_external_network() -> None:
     # 192.0.2.0/24 é TEST-NET-1; sem o bloqueio do conftest isto viraria OSError/timeout
     with pytest.raises(RuntimeError, match="rede externa"):
         socket.create_connection(("192.0.2.1", 443), timeout=0.5)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        gzip.compress(b'{"a": 1}') + b"GARBAGE",
+        gzip.compress(b'{"a": ') + gzip.compress(b"1}"),
+        gzip.compress(b"{}") + b"\0" * (JSON_LIMIT + 1),
+    ],
+    ids=["trailing-garbage", "multi-member", "trailing-over-limit"],
+)
+def test_rejects_data_after_gzip_end(content: bytes) -> None:
+    rec = Recorder(reply(200, content, content_encoding="gzip"))
+    with pytest.raises(FetchError, match="fim do gzip"):
+        rec.client().get_json(FEED)
+
+
+def test_non_ascii_retry_after_falls_back_to_backoff() -> None:
+    rec = Recorder(reply(503, retry_after="²".encode("latin-1")), reply())
+    assert rec.client().get_json(FEED).body == b"{}"
+    assert rec.sleeps == [1.0]

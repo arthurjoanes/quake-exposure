@@ -3,10 +3,11 @@ import re
 from collections.abc import Callable, Sequence
 
 import pytest
+from conftest import MANIFEST
 
 from quakeexposure.domain.grid import Grid, UnsupportedGrid, parse_grid
 
-REAL_GRIDS = ["grid_us6000u0hy", "grid_us7000tiur", "grid_aka2026tuxgky"]
+REAL_GRIDS = [e["name"] for e in MANIFEST if e["kind"] == "grid"]
 
 
 def raw_rows(text: str) -> tuple[dict[str, str], list[dict[str, float]]]:
@@ -133,8 +134,10 @@ def test_f14_antimeridian(lons: list[float]) -> None:
         pytest.param(grid_xml(LONS, LATS, fields=("LON", "LAT", "MMI", "MMI")), id="dup-field"),
         pytest.param(grid_xml([10.0], LATS), id="single-column"),
         pytest.param(
-            grid_xml(LONS, LATS, prolog='<!DOCTYPE shakemap_grid [<!ENTITY a "b">]>'), id="dtd"
+            grid_xml(LONS, LATS, prolog='<!DOCTYPE shakemap_grid [<!ENTITY a "b">]>'), id="entity"
         ),
+        pytest.param(grid_xml(LONS, LATS, prolog="<!DOCTYPE shakemap_grid>"), id="dtd"),
+        pytest.param(grid_xml([10.0, 10.0], LATS), id="zero-width"),
         pytest.param(b"<html>not a grid</html>", id="other-root"),
         pytest.param(b"not xml", id="not-xml"),
     ],
@@ -149,3 +152,22 @@ def test_point_limit() -> None:
     assert isinstance(parse_grid(data, max_points=12), Grid)
     with pytest.raises(UnsupportedGrid, match="pontos"):
         parse_grid(data, max_points=11)
+
+
+@pytest.mark.parametrize(
+    "lons",
+    [
+        # 11 colunas com passo 0,4902 cruzando 180°, e 0,2831 cruzando 0°
+        [
+            round(176.8447 + 0.4902 * i - (360 if 176.8447 + 0.4902 * i > 180 else 0), 4)
+            for i in range(11)
+        ],
+        [round(-1.6305 + 0.28314 * i, 4) for i in range(11)],
+    ],
+)
+def test_f15_asset_on_the_edge_is_inside(lons: list[float]) -> None:
+    grid = parse_grid(grid_xml(lons, LATS))
+    assert grid.mmi_at(lons[0], 1.0) == 10
+    assert grid.mmi_at(lons[-1], 1.0) == 20
+    assert grid.mmi_at(lons[-1], 0.0) == 30
+    assert grid.mmi_at(lons[0], 2.0) == 0

@@ -12,7 +12,7 @@ Feito:
 - `domain/shakemap.py`: seleção da ShakeMap por `preferredWeight` e `updateTime`, e o `product_revision_id`.
 - `contracts/event.schema.json` e `contracts/shakemap.schema.json`, validados contra todas as capturas.
 - `scripts/fetch_fixtures.py` e `tests/fixtures/manifest.json`, com capturas de 2026-10-08 00:02 UTC.
-- 79 testes unitários, sem rede.
+- 87 testes unitários, sem rede.
 
 Capturas:
 

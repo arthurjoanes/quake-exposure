@@ -57,7 +57,6 @@ def entry(
     product: str | None = None,
     detail: str | None = None,
 ) -> dict[str, Any]:
-    store(rel_path, fetched.body)
     return {
         "name": name,
         "kind": kind,
@@ -78,9 +77,10 @@ def entry(
     }
 
 
-def capture(usgs: UsgsClient) -> list[dict[str, Any]]:
+def capture(usgs: UsgsClient) -> list[tuple[dict[str, Any], bytes]]:
+    """Baixa tudo e só então devolve; quem chama grava (falha no meio não mexe nas fixtures)."""
     feed = usgs.get_json(FEED_URL)
-    entries = [entry("feed_all_day", "feed", feed, "usgs/feed_all_day.geojson.gz")]
+    captured = [(entry("feed_all_day", "feed", feed, "usgs/feed_all_day.geojson.gz"), feed.body)]
 
     start = feed.fetched_at - timedelta(days=90)
     query = usgs.get_json(
@@ -94,7 +94,9 @@ def capture(usgs: UsgsClient) -> list[dict[str, Any]]:
         },
         read_timeout=FDSN_READ_TIMEOUT,
     )
-    entries.append(entry("fdsn_shakemap_minmmi6", "fdsn", query, "usgs/fdsn_minmmi6.geojson.gz"))
+    captured.append(
+        (entry("fdsn_shakemap_minmmi6", "fdsn", query, "usgs/fdsn_minmmi6.geojson.gz"), query.body)
+    )
     # o evento mais recente da rede `us` que ainda não está na lista
     picked = next(
         f
@@ -110,7 +112,7 @@ def capture(usgs: UsgsClient) -> list[dict[str, Any]]:
             url, read_timeout=FDSN_READ_TIMEOUT if "/fdsnws/" in url else READ_TIMEOUT
         )
         name = f"detail_{event_id}"
-        entries.append(entry(name, "detail", detail, f"usgs/{name}.geojson.gz"))
+        captured.append((entry(name, "detail", detail, f"usgs/{name}.geojson.gz"), detail.body))
 
         product = select_shakemap(json.loads(detail.body))
         grid = product["contents"].get(GRID_PATH) if product else None
@@ -122,19 +124,18 @@ def capture(usgs: UsgsClient) -> list[dict[str, Any]]:
         fetched = usgs.get_product(
             grid["url"], declared_length=grid["length"], declared_sha256=grid["sha256"]
         )
-        entries.append(
-            entry(
-                f"grid_{event_id}",
-                "grid",
-                fetched,
-                ("usgs/" if in_git else "external/") + file_name,
-                in_git=in_git,
-                grid=grid,
-                product=product_revision_id(product),
-                detail=name,
-            )
+        grid_entry = entry(
+            f"grid_{event_id}",
+            "grid",
+            fetched,
+            ("usgs/" if in_git else "external/") + file_name,
+            in_git=in_git,
+            grid=grid,
+            product=product_revision_id(product),
+            detail=name,
         )
-    return entries
+        captured.append((grid_entry, fetched.body))
+    return captured
 
 
 def pull(usgs: UsgsClient, entries: list[dict[str, Any]]) -> None:
@@ -169,7 +170,10 @@ def main() -> None:
 
     with UsgsClient() as usgs:
         if args.command == "capture":
-            entries = capture(usgs)
+            captured = capture(usgs)
+            for e, body in captured:
+                store(e["path"], body)
+            entries = [e for e, _ in captured]
             kept = {e["path"] for e in entries}
             for old in FIXTURES.glob("*/*.gz"):
                 if old.relative_to(FIXTURES).as_posix() not in kept:
@@ -177,9 +181,8 @@ def main() -> None:
         else:
             entries = json.loads(MANIFEST.read_text("utf-8"))["fixtures"]
             pull(usgs, entries)
-    MANIFEST.write_text(
-        json.dumps({"fixtures": entries}, indent=2, ensure_ascii=False) + "\n", "utf-8"
-    )
+    text = json.dumps({"fixtures": entries}, indent=2, ensure_ascii=False) + "\n"
+    MANIFEST.write_text(text, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

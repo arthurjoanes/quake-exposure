@@ -24,7 +24,7 @@ Não há Makefile. Comando novo entra como `uv run qe ...` ou `docker compose ..
 - Testes: não enfraquecer teste para ficar verde. Oráculo independente nunca chama a função testada. Relógio injetado, sem `sleep` fixo para sincronizar. Falha injetada só no perfil de teste (failpoint ou servidor HTTP local). Teste de gate leva o F-ID no nome, por exemplo `test_f14_...`.
 - Fixtures: captura real não é editada. Mutação de teste é FAULT e fica rotulada no manifesto (`fault: true` e `parent_sha256`). Grids de redes diferentes de `us` não vão para o Git, só URL e sha256 no manifesto.
 - Docker: dados só em volumes nomeados, sem bind mount de dados. Senhas em `.secrets/`, lidas por variáveis `*_FILE`.
-- Stack: Python com uv, httpx, psycopg 3, jsonschema, defusedxml, FastAPI, pytest, Hypothesis; PostgreSQL + PostGIS, Kafka KRaft, Debezium; frontend TypeScript + Vite + Leaflet. Versões fixadas em lockfile e por tag de imagem, nunca `latest`. Ferramenta fora dessa lista só com ADR aceito em `docs/adr/`.
+- Stack: Python com uv, httpx, psycopg 3, jsonschema, defusedxml, FastAPI, confluent-kafka (CDC), pytest, Hypothesis e geographiclib (só oráculo de teste); Ruff e mypy strict; PostgreSQL + PostGIS, Kafka KRaft e Kafka Connect com Debezium PostgreSQL; frontend TypeScript strict + Vite + Leaflet com npm. Versões fixadas em lockfile e por tag de imagem, nunca `latest`. Ferramenta fora dessa lista só com ADR aceito em `docs/adr/`.
 - Texto de README, docs e interface: pt-BR, curto e seco. Sem "evidência", "prova", "ensaio", "atestar", "assegurar", negrito no meio de parágrafo, slogan ou aviso defensivo. Código e identificadores em inglês.
 - `docs/progress.md` traz o estado real de cada milestone.
 

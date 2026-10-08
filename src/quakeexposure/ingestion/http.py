@@ -152,7 +152,7 @@ def _retry_after(value: str | None, now: datetime) -> float | None:
     if value is None:
         return None
     value = value.strip()
-    if value.isdigit():
+    if value.isascii() and value.isdigit():
         seconds = float(value)
     else:
         try:
@@ -183,6 +183,9 @@ def _read_limited(resp: httpx.Response, limit: int, url: str) -> bytes:
                 out += gz.decompress(pending, limit + 1 - len(out))
             except zlib.error as exc:
                 raise FetchError(f"{url}: gzip inválido") from exc
+            # o USGS manda um membro só; o que vier depois do fim é lixo e não conta no limite
+            if gz.unused_data:
+                raise FetchError(f"{url}: dados após o fim do gzip")
             if len(out) > limit:
                 raise FetchError(f"{url}: acima de {limit} bytes decodificados")
             pending = gz.unconsumed_tail
