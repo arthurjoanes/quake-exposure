@@ -52,6 +52,12 @@ def report(conn: Conn, now: datetime) -> dict[str, Any]:
         "grids_rejected": count(
             "SELECT count(*) FROM quake.shakemap_grid WHERE status = 'REJECTED'"
         ),
+        "grids_retrying": count(
+            "SELECT count(*) FROM control.grid_attempt WHERE attempts < %s", MAX_REQUEST_ATTEMPTS
+        ),
+        "grids_failed": count(
+            "SELECT count(*) FROM control.grid_attempt WHERE attempts >= %s", MAX_REQUEST_ATTEMPTS
+        ),
         "events_active": {
             scope: n
             for scope, n in conn.execute(
@@ -84,7 +90,8 @@ def format_report(r: dict[str, Any]) -> str:
         f"quarentena: {r['quarantine_total']} ({r['quarantine_24h']} nas últimas 24 h)",
         f"details pendentes: {r['detail_requests_pending']}"
         f" (desistidos: {r['detail_requests_failed']})",
-        f"grids recusados: {r['grids_rejected']}",
+        f"grids recusados: {r['grids_rejected']}; com falha de rede: {r['grids_retrying']}"
+        f" (desistidos: {r['grids_failed']})",
         "eventos ativos: "
         + (", ".join(f"{k} {v}" for k, v in r["events_active"].items()) or "nenhum"),
     ]

@@ -13,6 +13,7 @@ from typing import Any
 
 import psycopg
 
+from quakeexposure.domain.canonical import from_epoch_ms
 from quakeexposure.ingestion import store
 from quakeexposure.ingestion.blobs import BlobStore
 from quakeexposure.ingestion.http import (
@@ -79,13 +80,13 @@ class Collector:
             self.poll_incremental(now)
         self.fetch_requested()
         self.fetch_grids()
-        project_pending(self.conn, self.blobs, self.clock())
+        self._project_pending()
         return min(self.next_feed, self.next_incremental)
 
     def poll_feed(self, now: datetime) -> None:
         try:
             new = self._take_collection("feed", self.client.get_json(FEED_URL))
-        except (FetchError, psycopg.Error) as exc:
+        except (FetchError, psycopg.Error, ValueError) as exc:
             self._source_error("feed", now, exc)
             return
         self._source_ok("feed", now, new)
@@ -103,7 +104,7 @@ class Collector:
         }
         try:
             new = self._query_windows(params, now - HORIZON, now)
-        except (FetchError, psycopg.Error) as exc:
+        except (FetchError, psycopg.Error, ValueError) as exc:
             self._source_error("incremental", now, exc)  # o watermark fica onde estava
             return
         self._source_ok("incremental", now, new, watermark=now)
@@ -157,16 +158,17 @@ class Collector:
 
     def fetch_requested(self) -> None:
         rows = self.conn.execute(
-            """SELECT provider_event_id, url FROM control.fetch_request
+            """SELECT provider_event_id, url, requested_at, min_updated FROM control.fetch_request
                WHERE attempts < %s ORDER BY requested_at, provider_event_id LIMIT %s""",
             (MAX_REQUEST_ATTEMPTS, REQUESTS_PER_TICK),
         ).fetchall()
-        for event_id, url in rows:
+        for event_id, url, requested_at, min_updated in rows:
             now = self.clock()
             try:
                 timeout = FDSN_READ_TIMEOUT if "/fdsnws/" in url else READ_TIMEOUT
                 fetched = self.client.get_json(url, read_timeout=timeout)
-                if not _is_feature(fetched.body):
+                updated = _feature_updated(fetched.body)
+                if updated is None:
                     raise ContentRejected(f"{url}: resposta não é Feature", transient=True)
             except HttpStatusError as exc:
                 if exc.status in (404, 409, 410) and url != reconsult_url(event_id):
@@ -183,11 +185,32 @@ class Collector:
                 continue
             # grava sempre: o mesmo detail pode valer de novo (conflito resolvido, reconsulta)
             self._store("detail", fetched)
+            self._project_pending()
             with self.conn.transaction():
-                self.conn.execute(
-                    "DELETE FROM control.fetch_request WHERE provider_event_id = %s", (event_id,)
-                )
+                if min_updated is not None and updated < min_updated:
+                    # detail de cache, mais velho que a revisão que o pediu: tenta de novo
+                    self.conn.execute(
+                        """UPDATE control.fetch_request SET attempts = attempts + 1,
+                               last_error = 'detail mais velho que a revisão'
+                           WHERE provider_event_id = %s AND requested_at = %s""",
+                        (event_id, requested_at),
+                    )
+                else:
+                    # só a linha lida: um pedido novo gravado durante o GET fica
+                    self.conn.execute(
+                        """DELETE FROM control.fetch_request
+                           WHERE provider_event_id = %s AND requested_at = %s""",
+                        (event_id, requested_at),
+                    )
+
+    def _project_pending(self) -> None:
+        """Projeta o pendente; erro transitório do banco só adia para o ciclo seguinte."""
+        try:
             project_pending(self.conn, self.blobs, self.clock())
+        except psycopg.Error as exc:
+            if self.conn.broken or self.conn.closed:
+                raise
+            log.warning("projeção adiada: %s", exc)
 
     def _request_failed(self, event_id: str, url: str, exc: FetchError) -> None:
         log.warning("detail %s: %s", event_id, exc)
@@ -214,14 +237,16 @@ class Collector:
                JOIN quake.earthquake e USING (stream_scope, earthquake_uid)
                JOIN quake.shakemap_product p USING (stream_scope, product_revision_id)
                LEFT JOIN quake.shakemap_grid g USING (stream_scope, product_revision_id)
+               LEFT JOIN control.grid_attempt t USING (stream_scope, product_revision_id)
                WHERE m.stream_scope = 'LIVE' AND e.merged_into IS NULL
                  AND g.product_revision_id IS NULL AND p.grid_url IS NOT NULL
+                 AND coalesce(t.attempts, 0) < %s
                  AND (e.event_time >= %s OR EXISTS (
                       SELECT 1 FROM quake.alias a
                       JOIN control.watchlist w ON w.provider_event_id = a.provider_id
                       WHERE a.stream_scope = 'LIVE' AND a.earthquake_uid = e.earthquake_uid))
-               ORDER BY e.event_time DESC LIMIT %s""",
-            (now - SCOPE_WINDOW, GRIDS_PER_TICK),
+               ORDER BY coalesce(t.attempts, 0), e.event_time DESC LIMIT %s""",
+            (MAX_REQUEST_ATTEMPTS, now - SCOPE_WINDOW, GRIDS_PER_TICK),
         ).fetchall()
         for product, url, length, sha in rows:
             try:
@@ -229,7 +254,18 @@ class Collector:
             except FetchError as exc:
                 log.warning("grid %s: %s", product, exc)
                 if exc.transient:
-                    continue  # tenta de novo no próximo ciclo
+                    # tenta de novo nos próximos ciclos, até o limite, sem travar os outros
+                    self.conn.execute(
+                        """INSERT INTO control.grid_attempt (stream_scope, product_revision_id,
+                               attempts, last_error, last_attempt_at)
+                           VALUES ('LIVE', %s, 1, %s, %s)
+                           ON CONFLICT (stream_scope, product_revision_id) DO UPDATE SET
+                               attempts = control.grid_attempt.attempts + 1,
+                               last_error = EXCLUDED.last_error,
+                               last_attempt_at = EXCLUDED.last_attempt_at""",
+                        (product, _reason(exc), self.clock()),
+                    )
+                    continue
                 with self.conn.transaction():
                     store.quarantine(self.conn, "LIVE", None, f"grid: {_reason(exc)}", sha)
                     store.store_grid(
@@ -237,7 +273,12 @@ class Collector:
                     )
                 continue
             self._store("grid", fetched, product=product)
-            project_pending(self.conn, self.blobs, self.clock())
+            self.conn.execute(
+                """DELETE FROM control.grid_attempt
+                   WHERE stream_scope = 'LIVE' AND product_revision_id = %s""",
+                (product,),
+            )
+            self._project_pending()
 
     def _take_collection(self, kind: str, fetched: Fetched) -> int:
         """Guarda a captura só se ela trouxer algo novo; senão fica só a linha de log."""
@@ -261,7 +302,7 @@ class Collector:
             log.info("%s sem revisão nova (%d bytes)", kind, len(fetched.body))
             return 0
         capture_id = self._store(kind, fetched)
-        new = project_pending(self.conn, self.blobs, self.clock()).new_revisions
+        new = project_pending(self.conn, self.blobs, self.clock()).new_revisions  # levanta
         status = self.conn.execute(
             "SELECT projection_status FROM control.capture WHERE capture_id = %s", (capture_id,)
         ).fetchone()
@@ -321,12 +362,15 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def _is_feature(body: bytes) -> bool:
+def _feature_updated(body: bytes) -> datetime | None:
+    """`updated` do detail, ou None se a resposta não é uma Feature com `updated`."""
     try:
         doc = json.loads(body)
-    except ValueError:
-        return False
-    return isinstance(doc, dict) and doc.get("type") == "Feature"
+        if isinstance(doc, dict) and doc.get("type") == "Feature":
+            return from_epoch_ms(int(doc["properties"]["updated"]))
+    except ValueError, KeyError, TypeError, OverflowError:
+        pass
+    return None
 
 
 def _reason(exc: FetchError) -> str:

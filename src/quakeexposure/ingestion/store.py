@@ -260,7 +260,10 @@ def store_detail_products(
                    grid_length, grid_sha256, detail_updated_at, capture_id)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (stream_scope, product_revision_id) DO UPDATE
-                   SET earthquake_uid = EXCLUDED.earthquake_uid""",
+                   SET earthquake_uid = EXCLUDED.earthquake_uid,
+                       detail_updated_at = EXCLUDED.detail_updated_at,
+                       capture_id = EXCLUDED.capture_id
+                   WHERE quake.shakemap_product.detail_updated_at <= EXCLUDED.detail_updated_at""",
             (scope, product_revision_id(p), uid, p["source"], p["code"], p["updateTime"],
              p["preferredWeight"], p["status"], grid.get("url"), grid.get("length"),
              grid.get("sha256"), detail_updated, capture_id),
@@ -303,14 +306,23 @@ def store_grid(
     )  # fmt: skip
 
 
-def request_fetch(conn: Conn, provider_event_id: str, url: str, reason: str, now: datetime) -> None:
+def request_fetch(
+    conn: Conn,
+    provider_event_id: str,
+    url: str,
+    reason: str,
+    now: datetime,
+    min_updated: datetime | None = None,
+) -> None:
+    """Pede (ou renova) o detail. `min_updated`: o detail tem que ser pelo menos desta idade."""
     conn.execute(
-        """INSERT INTO control.fetch_request (provider_event_id, url, reason, requested_at)
-           VALUES (%s, %s, %s, %s)
+        """INSERT INTO control.fetch_request (provider_event_id, url, reason, requested_at,
+               min_updated) VALUES (%s, %s, %s, %s, %s)
            ON CONFLICT (provider_event_id) DO UPDATE SET url = EXCLUDED.url,
                reason = EXCLUDED.reason, requested_at = EXCLUDED.requested_at,
-               attempts = 0, last_error = NULL""",
-        (provider_event_id, url, reason, now),
+               attempts = 0, last_error = NULL,
+               min_updated = GREATEST(control.fetch_request.min_updated, EXCLUDED.min_updated)""",
+        (provider_event_id, url, reason, now, min_updated),
     )
 
 
