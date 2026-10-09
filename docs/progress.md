@@ -174,7 +174,7 @@ Tempo de revisão aplicada até as 4 publicações (2 tenants × 2 modos): media
 
 A página foi aberta na pilha real: `us7000tiur` no REPLAY e no LIVE com valores por moeda e antes e depois; só requisições para 127.0.0.1; evento a −177,6° desenhado ao lado de um a 179,9°.
 
-Revisão: uma rodada adversarial em cinco frentes (SPEC, worker, API, página e testes), cada achado conferido por um segundo agente. Corrigido:
+Revisão: uma rodada adversarial em cinco frentes (requisitos, worker, API, página e testes), cada achado conferido por um segundo agente. Corrigido:
 
 - job cujo vetor mudou entre a marcação e o claim voltava igual para a fila, e a rodada do worker não terminava;
 - a mudança de entrada só subia a geração quando o worker marcava, então o CAS nunca recusava nada na pilha real (o teste do F12 marcava à mão);
@@ -195,3 +195,23 @@ Observações:
 - Sem requisições ao USGS neste milestone: o coletor ficou parado e a demo usou REPLAY e FAULT.
 
 Pendências: nenhuma.
+
+## M4: CDC real da carteira e v0.2 (2026-10-09)
+
+Concluído.
+
+- Origem PostgreSQL 18.6, Kafka 4.3.1 e Debezium 3.6.2. Publicação e tópicos manuais; somente intervalos e clock saem da origem.
+- Funções de escrita serializam o tenant, incrementam uma epoch por comando e deduplicam o command_id. Correção retroativa é explícita. Seed em lotes com estado de conclusão e UUIDs aleatórios por ativo.
+- Stage durável; END pode chegar antes das linhas. Aplicação integral somente após contagens exatas e epoch seguinte. Offset confirmado depois do banco, em lotes de até 250 mensagens ou 1 s. Payload aplicado é descartado.
+- API exibe transações pendentes, estado do Connect e WAL do slot. O papel da API não lê o stage.
+- Smoke real em [results/m4-cdc-smoke.md](results/m4-cdc-smoke.md). O identificador bruto do Debezium muda de LSN dentro da transação; a chave interna combina XID e instante de commit.
+
+Validação executada por grupos: 171 testes unitários/propriedade anteriores, 70 integrações anteriores, 15 unitários CDC, 11 integrações CDC, 10 da origem, 3 gates com Debezium real (F01/F09/F13) e 2 da infraestrutura (incluindo F23). Ruff e mypy limpos. Interface: 33 testes, typecheck e build passaram.
+
+Demo na stack com 10.000 ativos: duplicata preservou publication_id; correção via CDC mudou operadora-b de epoch 12 para 13, mantendo lon -152,16068 em K12 e -152,14068 em K13; geração 9 recusada após chegar geração 10, publicação final geração 11. Zero requisições ao USGS.
+
+RAM por `docker stats`, durante a demo: plataforma 354,30 MiB; origem 58,30 MiB; Kafka 571,70 MiB; Connect 1,215 GiB; CDC 49,58 MiB; API 56,41 MiB; worker 38,87 MiB. Total aproximado 2,32 GiB. Docker com 15,56 GiB, outros projetos também ativos.
+
+O primeiro bootstrap excedeu 180 s com commit Kafka por mensagem. Após agrupar confirmações, o consumidor drenou cerca de 500 linhas a cada 3 s; a retomada verificou o seed completo e terminou sem semear novamente. A medição a frio fica no M6.
+
+A stack nova usa o projeto Compose `quake-exposure-v03`; os volumes da v0.1 foram preservados. Pendência externa: push depende do Arthur.

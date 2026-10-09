@@ -24,6 +24,8 @@ from quakeexposure.ingestion.collector import Collector
 from quakeexposure.ingestion.http import UsgsClient
 from quakeexposure.migrate import migrate
 
+from .cdc_support import cdc_stack as cdc_stack
+
 PROJECT = f"qe-it-{uuid.uuid4().hex[:8]}"
 
 
@@ -74,7 +76,9 @@ def conn(database: Database) -> Iterator[psycopg.Connection[Any]]:
             f"{s}.{t}"
             for s, t in owner.execute(
                 """SELECT table_schema, table_name FROM information_schema.tables
-                   WHERE table_schema IN ('control', 'quake', 'portfolio', 'exposure', 'serving')
+                   WHERE table_schema IN (
+                       'control', 'quake', 'portfolio', 'exposure', 'serving', 'privacy'
+                   )
                      AND table_type = 'BASE TABLE'
                      AND table_name <> 'schema_migration'"""
             )

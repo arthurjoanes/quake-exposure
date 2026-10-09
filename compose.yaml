@@ -66,9 +66,19 @@ services:
       <<: *db
       QE_DB_USER: qe_pipeline
       QE_DB_PASSWORD_FILE: /run/secrets/qe_pipeline
-    secrets: [qe_pipeline]
+      QE_SOURCE_DB_HOST: source-db
+      QE_SOURCE_DB_NAME: qe_source
+      QE_SOURCE_DB_USER: qe_source_writer
+      QE_SOURCE_DB_PASSWORD_FILE: /run/secrets/qe_source_writer
+      QE_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      QE_CONNECT_URL: http://connect:8083
+      QE_ERASURE_LEDGER: /data/privacy/erasure.jsonl
+      QE_BACKUP_DIR: /data/backups
+    secrets: [qe_pipeline, qe_source_writer]
     volumes:
       - blobs:/data/blobs
+      - privacy-ledger:/data/privacy
+      - backups:/data/backups
     restart: unless-stopped
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -88,19 +98,198 @@ services:
     depends_on:
       migrate: {condition: service_completed_successfully}
 
+  source-db:
+    image: postgres:18.6-trixie
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4"]
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/source_postgres
+    secrets: [source_postgres, qe_source_owner, qe_source_writer, qe_debezium]
+    configs:
+      - source: source-db-init
+        target: /docker-entrypoint-initdb.d/10-roles.sh
+    volumes: [source-db:/var/lib/postgresql]
+    networks: [pipeline]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -U postgres -d qe_source -tAc \"SELECT 1 FROM pg_roles WHERE rolname = 'qe_debezium'\" | grep -q 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  source-migrate:
+    <<: *app
+    command: ["qe", "source-migrate"]
+    environment:
+      QE_SOURCE_DB_HOST: source-db
+      QE_SOURCE_DB_NAME: qe_source
+      QE_SOURCE_DB_USER: qe_source_owner
+      QE_SOURCE_DB_PASSWORD_FILE: /run/secrets/qe_source_owner
+    secrets: [qe_source_owner]
+    depends_on:
+      source-db: {condition: service_healthy}
+
+  kafka:
+    image: apache/kafka:4.3.1
+    environment:
+      CLUSTER_ID: bFhyWll3QYahRCjTcUL_ZA
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: "168"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    volumes: [kafka:/var/lib/kafka/data]
+    networks: [pipeline]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:9092", "--list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  kafka-topics:
+    image: apache/kafka:4.3.1
+    entrypoint: ["/bin/sh", "/config/kafka-topics.sh"]
+    environment:
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx128m
+    configs:
+      - source: kafka-topics
+        target: /config/kafka-topics.sh
+    networks: [pipeline]
+    depends_on:
+      kafka: {condition: service_healthy}
+
+  connect:
+    image: quay.io/debezium/connect:3.6.2.Final
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: qe-connect
+      CONFIG_STORAGE_TOPIC: connect-configs
+      OFFSET_STORAGE_TOPIC: connect-offsets
+      STATUS_STORAGE_TOPIC: connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_TOPIC_CREATION_ENABLE: "false"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_CONFIG_PROVIDERS: secrets
+      CONNECT_CONFIG_PROVIDERS_SECRETS_CLASS: org.apache.kafka.common.config.provider.DirectoryConfigProvider
+      CONNECT_CONFIG_PROVIDERS_SECRETS_PARAM_ALLOWED_PATHS: /run/secrets
+      HEAP_OPTS: -Xms768m -Xmx768m
+      OFFSET_FLUSH_INTERVAL_MS: "1000"
+    secrets: [qe_debezium]
+    networks: [pipeline]
+    restart: unless-stopped
+    depends_on:
+      kafka-topics: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8083/connectors"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  connector-init:
+    image: quay.io/debezium/connect:3.6.2.Final
+    entrypoint: ["/bin/sh", "/config/register-connector.sh"]
+    configs:
+      - source: portfolio-connector
+        target: /config/portfolio-connector.json
+      - source: register-connector
+        target: /config/register-connector.sh
+    networks: [pipeline]
+    depends_on:
+      source-migrate: {condition: service_completed_successfully}
+      connect: {condition: service_healthy}
+
+  cdc:
+    <<: *app
+    command: ["qe", "cdc"]
+    environment:
+      <<: *db
+      QE_DB_USER: qe_pipeline
+      QE_DB_PASSWORD_FILE: /run/secrets/qe_pipeline
+      QE_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      QE_CONNECT_URL: http://connect:8083
+      QE_SOURCE_DB_HOST: source-db
+      QE_SOURCE_DB_NAME: qe_source
+      QE_SOURCE_DB_USER: qe_source_writer
+      QE_SOURCE_DB_PASSWORD_FILE: /run/secrets/qe_source_writer
+      QE_ERASURE_LEDGER: /data/privacy/erasure.jsonl
+      QE_BACKUP_DIR: /data/backups
+    secrets: [qe_pipeline, qe_source_writer]
+    volumes:
+      - privacy-ledger:/data/privacy
+      - backups:/data/backups
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      connector-init: {condition: service_completed_successfully}
+
+  maintenance:
+    <<: *app
+    profiles: [tools]
+    command: ["qe", "status"]
+    environment:
+      <<: *db
+      QE_DB_USER: qe_owner
+      QE_DB_PASSWORD_FILE: /run/secrets/qe_owner
+      QE_SOURCE_DB_HOST: source-db
+      QE_SOURCE_DB_NAME: qe_source
+      QE_SOURCE_DB_USER: qe_source_owner
+      QE_SOURCE_DB_PASSWORD_FILE: /run/secrets/qe_source_owner
+      QE_POSTGRES_PASSWORD_FILE: /run/secrets/postgres
+      QE_SOURCE_POSTGRES_PASSWORD_FILE: /run/secrets/source_postgres
+      QE_ERASURE_LEDGER: /data/privacy/erasure.jsonl
+      QE_BACKUP_DIR: /data/backups
+    secrets: [qe_owner, qe_source_owner, postgres, source_postgres]
+    volumes:
+      - blobs:/data/blobs
+      - privacy-ledger:/data/privacy
+      - backups:/data/backups
+    depends_on:
+      platform-db: {condition: service_healthy}
+      source-db: {condition: service_healthy}
+
 secrets:
   postgres: {file: "${QE_SECRETS_DIR:-./.secrets}/postgres"}
   qe_owner: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_owner"}
   qe_pipeline: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_pipeline"}
   qe_api_read: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_api_read"}
+  source_postgres: {file: "${QE_SECRETS_DIR:-./.secrets}/source_postgres"}
+  qe_source_owner: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_source_owner"}
+  qe_source_writer: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_source_writer"}
+  qe_debezium: {file: "${QE_SECRETS_DIR:-./.secrets}/qe_debezium"}
 
 configs:
   platform-db-init:
     file: ./docker/platform-db-init.sh
+  source-db-init:
+    file: ./docker/source-db-init.sh
+  kafka-topics:
+    file: ./docker/kafka-topics.sh
+  portfolio-connector:
+    file: ./docker/portfolio-connector.json
+  register-connector:
+    file: ./docker/register-connector.sh
 
 volumes:
   platform-db:
   blobs:
+  source-db:
+  kafka:
+  privacy-ledger:
+  backups:
 
 networks:
   app:

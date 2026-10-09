@@ -1,10 +1,9 @@
-"""`qe demo` (passos 1, 2 e 4) e `qe bench` (tempo de revisão aplicada até publicação).
+"""`qe demo` e `qe bench` (tempo de revisão aplicada até publicação).
 
 1. replay de captura real e cálculo inicial;
 2. revisão FAULT que muda a exposição, e a mesma captura de novo sem efeito;
+3. correção retroativa da carteira pela origem e CDC;
 4. job velho recusado pela geração.
-
-Os passos 3 (CDC) e 5 (exclusão de titular) entram com o CDC e a exclusão.
 """
 
 import gzip
@@ -26,7 +25,6 @@ from quakeexposure.ingestion.projection import project_pending
 from quakeexposure.ingestion.replay import MANIFEST, capture_fault, replay
 from quakeexposure.ingestion.store import Conn
 from quakeexposure.portfolio import store as portfolio
-from quakeexposure.portfolio.synthetic import generate
 
 EVENT = "us7000tiur"  # M 5,5 em Flores, MMI até 6,7: a carteira de demo tem ativos em volta
 Out = Callable[[str], None]
@@ -69,6 +67,9 @@ def demo(
     same = _current(conn) == after
     out("   revisão duplicada, nenhum cálculo novo; publication_id igual: "
         + ("sim" if same else "NÃO"))  # fmt: skip
+    assert same, "revisão duplicada mudou a publicação"
+
+    _portfolio_step(conn, blobs, now, out)
 
     out("4. job velho recusado pela geração")
     tenant = portfolio.tenants(conn)[0].tenant_id
@@ -89,6 +90,7 @@ def demo(
             _fault(second, blobs, detail, newest, now())  # a projeção sobe a geração
 
     result = worker.run(conn, blobs, job, now, before_commit=new_revision_during_calculation)
+    assert result == "stale", "o job velho foi publicado"
     generation = conn.execute(
         """SELECT desired_generation FROM control.exposure_job WHERE tenant_id = %s
            AND earthquake_uid = %s AND stream_scope = 'FAULT' AND mode = %s""",
@@ -104,6 +106,72 @@ def demo(
         (tenant, uid, Mode.RADIUS_TRIAGE),
     ).fetchone()
     out(f"   publicada a geração {published[0] if published else '-'}")
+
+
+def _portfolio_step(conn: Conn, blobs: BlobStore, now: Callable[[], datetime], out: Out) -> None:
+    from quakeexposure.bootstrap import wait_for_epoch
+    from quakeexposure.domain.portfolio import assets_as_of
+    from quakeexposure.portfolio.source import connect_source, correct
+
+    out("3. correção retroativa da carteira via CDC, com comparação as-of")
+    event_time = conn.execute(
+        """SELECT e.event_time FROM quake.earthquake e JOIN quake.alias a
+             USING (stream_scope, earthquake_uid)
+           WHERE e.stream_scope = 'REPLAY' AND a.provider_id = %s""",
+        (EVENT,),
+    ).fetchone()
+    assert event_time is not None
+    with connect_source() as source:
+        row = source.execute(
+            """SELECT a.tenant_id, a.asset_interval_id, a.asset_id, a.lon, a.lat,
+                      c.epoch, c.source_epoch
+               FROM public.asset_interval a JOIN public.portfolio_clock c USING (tenant_id)
+               WHERE NOT a.is_deleted AND a.valid_from <= %s
+                 AND (a.valid_to IS NULL OR a.valid_to > %s)
+               ORDER BY a.tenant_id, a.asset_interval_id LIMIT 1""",
+            (event_time[0], event_time[0]),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("nenhum ativo na origem para a demonstração CDC")
+        tenant, interval, asset_id, lon, lat, old_epoch, source_epoch = row
+        before = next(
+            a
+            for a in assets_as_of(
+                portfolio.versions_known(conn, tenant, old_epoch),
+                tenant_id=tenant,
+                at=event_time[0],
+                epoch=old_epoch,
+            )
+            if a.asset_id == asset_id
+        )
+        new_lon = round(lon + (0.02 if lon < 179 else -0.02), 6)
+        result = correct(source, tenant, interval, lon=new_lon, lat=lat)
+        epoch = result.epoch
+    wait_for_epoch(conn, tenant, epoch, source_epoch)
+    known = portfolio.versions_known(conn, tenant, epoch)
+    old = next(
+        a
+        for a in assets_as_of(
+            known,
+            tenant_id=tenant,
+            at=event_time[0],
+            epoch=old_epoch,
+        )
+        if a.asset_id == asset_id
+    )
+    current = next(
+        a
+        for a in assets_as_of(
+            known,
+            tenant_id=tenant,
+            at=event_time[0],
+            epoch=epoch,
+        )
+        if a.asset_id == asset_id
+    )
+    assert old.lon == before.lon and current.lon == new_lon
+    _drain(conn, blobs, now)
+    out(f"   {tenant}/{asset_id}: epoch {old_epoch} lon {old.lon}; epoch {epoch} lon {current.lon}")
 
 
 def bench(
@@ -150,8 +218,7 @@ def bench(
 def ensure_portfolio(conn: Conn, out: Out = print) -> None:
     if portfolio.tenants(conn):
         return
-    n = portfolio.load(conn, generate())
-    out(f"carteira sintética carregada: {n} versões de ativo")
+    raise RuntimeError("carteira ausente: execute qe bootstrap antes de qe demo")
 
 
 def shifted(detail: bytes, *, dlon: float, updated: int) -> dict[str, Any]:

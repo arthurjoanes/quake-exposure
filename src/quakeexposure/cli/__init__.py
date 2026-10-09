@@ -8,7 +8,16 @@ from datetime import UTC, date, datetime
 from importlib.metadata import version
 from pathlib import Path
 
-SECRET_NAMES = ("postgres", "qe_owner", "qe_pipeline", "qe_api_read")
+SECRET_NAMES = (
+    "postgres",
+    "qe_owner",
+    "qe_pipeline",
+    "qe_api_read",
+    "source_postgres",
+    "qe_source_owner",
+    "qe_source_writer",
+    "qe_debezium",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,6 +28,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("secrets", help="cria as senhas em .secrets/ (as que faltarem)")
     p.add_argument("--dir", type=Path, default=Path(".secrets"))
     sub.add_parser("migrate", help="aplica as migrações (papel qe_owner)")
+    sub.add_parser("source-migrate", help="aplica as migrações da origem")
+    sub.add_parser("cdc", help="consome as transações da carteira pelo Kafka")
+    p = sub.add_parser("bootstrap", help="semeia a origem e aguarda a carteira pelo CDC")
+    p.add_argument("--assets", type=int, default=10_000)
+    p.add_argument("--seed", type=int, default=42)
     sub.add_parser("collect", help="roda o coletor do USGS sem parar")
     p = sub.add_parser("backfill", help="busca no FDSN dia a dia, com cursor por dia")
     p.add_argument("--from", dest="first", type=date.fromisoformat, required=True)
@@ -29,10 +43,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("watch", help="watchlist de eventos que sempre entram no cálculo")
     p.add_argument("action", choices=["add", "remove", "list"])
     p.add_argument("event_id", nargs="?")
-    p = sub.add_parser("portfolio", help="carteira fictícia: carga direta na plataforma")
-    p.add_argument("action", choices=["seed"])
+    p = sub.add_parser("portfolio", help="comandos da carteira na origem PostgreSQL")
+    p.add_argument("action", choices=["seed", "correct"])
     p.add_argument("--assets", type=int, default=10_000)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--tenant")
+    p.add_argument("--interval")
+    p.add_argument("--lon", type=float)
+    p.add_argument("--lat", type=float)
+    p.add_argument("--command-id")
     sub.add_parser("worker", help="calcula e publica a exposição sem parar")
     p = sub.add_parser("explain", help="vetor de entrada e o que mudou desde a publicação anterior")
     p.add_argument("event_id")
@@ -55,8 +74,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "secrets":
         return _secrets(args.dir)
+    if args.command == "source-migrate":
+        from quakeexposure.portfolio.source import connect_source, migrate_source
+
+        with connect_source(user=os.environ.get("QE_SOURCE_DB_USER", "qe_source_owner")) as conn:
+            applied = migrate_source(conn)
+        print(f"migrações da origem aplicadas: {len(applied)}")
+        return 0
 
     from quakeexposure.db import connect
+
+    if args.command == "cdc":
+        from quakeexposure.cdc.consumer import run_forever as run_cdc
+
+        with connect() as conn:
+            run_cdc(conn)
+        return 0
+    if args.command == "bootstrap":
+        from quakeexposure.bootstrap import bootstrap
+
+        bootstrap(assets=args.assets, seed=args.seed)
+        return 0
 
     if args.command == "migrate":
         from quakeexposure.migrate import migrate
@@ -80,12 +118,33 @@ def main(argv: list[str] | None = None) -> int:
         uvicorn.run("quakeexposure.api:app", host=args.host, port=args.port)
         return 0
     if args.command == "portfolio":
-        from quakeexposure.portfolio.store import load
-        from quakeexposure.portfolio.synthetic import generate
+        from dataclasses import asdict
+        from uuid import UUID
 
-        with connect() as conn:
-            n = load(conn, generate(args.assets, args.seed))
-        print(f"versões de ativo carregadas: {n}")
+        from quakeexposure.portfolio.source import (
+            CommandResult,
+            SeedResult,
+            connect_source,
+            correct,
+            seed,
+        )
+
+        result: SeedResult | CommandResult
+        with connect_source() as conn:
+            if args.action == "seed":
+                result = seed(conn, count=args.assets, seed=args.seed)
+            else:
+                if any(x is None for x in (args.tenant, args.interval, args.lon, args.lat)):
+                    parser.error("correct exige --tenant, --interval, --lon e --lat")
+                result = correct(
+                    conn,
+                    args.tenant,
+                    args.interval,
+                    lon=args.lon,
+                    lat=args.lat,
+                    command_id=UUID(args.command_id) if args.command_id else None,
+                )
+        print(json.dumps(asdict(result), default=str, ensure_ascii=False))
         return 0
     if args.command == "explain":
         return _explain(args)
