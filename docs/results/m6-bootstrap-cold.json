@@ -1,0 +1,366 @@
+{
+  "project": "qe-cold-808cc8ac",
+  "images_cached": true,
+  "volumes_initially_empty": true,
+  "usgs_requests": 0,
+  "seed": 42,
+  "assets": 10000,
+  "host_platform": "Windows-11-10.0.26300-SP0",
+  "host_cpu_count": 16,
+  "started_at": "2026-10-09T22:46:51.014778+00:00",
+  "git_commit": "bb230decd8ac58500f0969b880bdbbe6c575ad37",
+  "git_worktree_dirty": true,
+  "images": [
+    {
+      "tags": [
+        "quake-exposure-app:dev"
+      ],
+      "id": "sha256:5ece8079257433ef383bee1bcca0af38934d7610723a3b682d05994f182fc3f0",
+      "digests": [
+        "quake-exposure-app@sha256:5ece8079257433ef383bee1bcca0af38934d7610723a3b682d05994f182fc3f0"
+      ]
+    },
+    {
+      "tags": [
+        "postgis/postgis:18-3.6"
+      ],
+      "id": "sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677",
+      "digests": [
+        "postgis/postgis@sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677"
+      ]
+    },
+    {
+      "tags": [
+        "postgres:18.6-trixie"
+      ],
+      "id": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+      "digests": [
+        "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+      ]
+    },
+    {
+      "tags": [
+        "apache/kafka:4.3.1"
+      ],
+      "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837",
+      "digests": [
+        "apache/kafka@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      ]
+    },
+    {
+      "tags": [
+        "quay.io/debezium/connect:3.6.2.Final"
+      ],
+      "id": "sha256:3f8513649a1acda5130a01550a26c670fee5c5787d5ec799b609d01b3dea2f4d",
+      "digests": [
+        "quay.io/debezium/connect@sha256:3f8513649a1acda5130a01550a26c670fee5c5787d5ec799b609d01b3dea2f4d"
+      ]
+    }
+  ],
+  "docker": {
+    "ServerVersion": "29.7.2",
+    "NCPU": 16,
+    "MemTotal": 16707641344,
+    "OperatingSystem": "Docker Desktop",
+    "Architecture": "x86_64"
+  },
+  "cdc_started_seconds": 64.861,
+  "bootstrap_stdout": "comandos de origem: SeedResult(assets=10000, rows=11010, commands=23, epochs={'operadora-b': 12, 'seguradora-a': 11})\nbootstrap concluído em 114.81 s",
+  "bootstrap_command_seconds": 118.953,
+  "portfolio_and_replay_ready_seconds": 183.814,
+  "source": {
+    "assets": 10000,
+    "intervals": 10505,
+    "clocks": [
+      {
+        "tenant_id": "operadora-b",
+        "epoch": 12,
+        "source_epoch": 1
+      },
+      {
+        "tenant_id": "seguradora-a",
+        "epoch": 11,
+        "source_epoch": 1
+      }
+    ],
+    "seed": {
+      "singleton": true,
+      "assets": 10000,
+      "seed": 42,
+      "completed": true,
+      "started_at": "2026-10-09T22:48:08.023399+00:00",
+      "completed_at": "2026-10-09T22:48:19.479188+00:00"
+    }
+  },
+  "api_loopback_port": 55106,
+  "first_demo_publication_seconds": 356.208,
+  "demo_event_four_publications_seconds": 356.907,
+  "demo_event_publications": {
+    "operadora-b:RADIUS_TRIAGE": {
+      "publication_id": "83a2a402580ed39a2c1c4cde28aa6bdbf9d51d650309818024674dc6cc0d153f",
+      "generation": 1,
+      "result": {
+        "calculation_id": "83a2a402580ed39a2c1c4cde28aa6bdbf9d51d650309818024674dc6cc0d153f",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "c8a24b2b-7d97-4b42-a2e8-93aa65671fce",
+          "event_semantic_sha256": "de75d25c8e5f012eff4db3a66f45f0b907277bfb8d833792ee5ca382951270ce",
+          "product_revision_id": "NONE",
+          "tenant_id": "operadora-b",
+          "portfolio_epoch": 12,
+          "portfolio_source_epoch": 1,
+          "mode": "RADIUS_TRIAGE",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 5000,
+        "qualifying_count": 1931,
+        "qualifying_value_minor": {
+          "BRL": "5067820026",
+          "USD": "29352865208"
+        },
+        "calculated_at": "2026-10-09T22:52:56.042Z",
+        "published_at": "2026-10-09T22:52:56.239Z",
+        "limitations": [
+          "RADIUS_IS_PROXIMITY_NOT_INTENSITY"
+        ]
+      }
+    },
+    "operadora-b:SHAKEMAP_MMI": {
+      "publication_id": "97a2208e85de9c8c9d1a977fdfc64815318795e77cd6f6ee235b991e2b747c04",
+      "generation": 1,
+      "result": {
+        "calculation_id": "97a2208e85de9c8c9d1a977fdfc64815318795e77cd6f6ee235b991e2b747c04",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "c8a24b2b-7d97-4b42-a2e8-93aa65671fce",
+          "event_semantic_sha256": "de75d25c8e5f012eff4db3a66f45f0b907277bfb8d833792ee5ca382951270ce",
+          "product_revision_id": "urn:usgs-product:us:shakemap:us7000tiur:1790041565495",
+          "tenant_id": "operadora-b",
+          "portfolio_epoch": 12,
+          "portfolio_source_epoch": 1,
+          "mode": "SHAKEMAP_MMI",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 1972,
+        "qualifying_count": 45,
+        "qualifying_value_minor": {
+          "BRL": "86434666",
+          "USD": "514787670"
+        },
+        "calculated_at": "2026-10-09T22:52:56.315Z",
+        "published_at": "2026-10-09T22:52:56.441Z",
+        "limitations": [
+          "MMI_FROM_NEAREST_GRID_NODE",
+          "TRIAGE_RULE_NOT_DAMAGE_MODEL"
+        ]
+      }
+    },
+    "seguradora-a:RADIUS_TRIAGE": {
+      "publication_id": "700d3a570a76100a16719ff4a982ca86c13e195089fbb7cdcb45ab2250d17cf6",
+      "generation": 1,
+      "result": {
+        "calculation_id": "700d3a570a76100a16719ff4a982ca86c13e195089fbb7cdcb45ab2250d17cf6",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "c8a24b2b-7d97-4b42-a2e8-93aa65671fce",
+          "event_semantic_sha256": "de75d25c8e5f012eff4db3a66f45f0b907277bfb8d833792ee5ca382951270ce",
+          "product_revision_id": "NONE",
+          "tenant_id": "seguradora-a",
+          "portfolio_epoch": 11,
+          "portfolio_source_epoch": 1,
+          "mode": "RADIUS_TRIAGE",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 5000,
+        "qualifying_count": 1924,
+        "qualifying_value_minor": {
+          "BRL": "30636161024",
+          "USD": "6516735331"
+        },
+        "calculated_at": "2026-10-09T22:52:56.452Z",
+        "published_at": "2026-10-09T22:52:56.599Z",
+        "limitations": [
+          "RADIUS_IS_PROXIMITY_NOT_INTENSITY"
+        ]
+      }
+    },
+    "seguradora-a:SHAKEMAP_MMI": {
+      "publication_id": "025a1080ef5dae6dc392c981a2ed978c6a66744b9d41b870e4808e791aaa41ac",
+      "generation": 1,
+      "result": {
+        "calculation_id": "025a1080ef5dae6dc392c981a2ed978c6a66744b9d41b870e4808e791aaa41ac",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "c8a24b2b-7d97-4b42-a2e8-93aa65671fce",
+          "event_semantic_sha256": "de75d25c8e5f012eff4db3a66f45f0b907277bfb8d833792ee5ca382951270ce",
+          "product_revision_id": "urn:usgs-product:us:shakemap:us7000tiur:1790041565495",
+          "tenant_id": "seguradora-a",
+          "portfolio_epoch": 11,
+          "portfolio_source_epoch": 1,
+          "mode": "SHAKEMAP_MMI",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 1959,
+        "qualifying_count": 31,
+        "qualifying_value_minor": {
+          "BRL": "289536422",
+          "USD": "118961538"
+        },
+        "calculated_at": "2026-10-09T22:52:56.681Z",
+        "published_at": "2026-10-09T22:52:56.795Z",
+        "limitations": [
+          "MMI_FROM_NEAREST_GRID_NODE",
+          "TRIAGE_RULE_NOT_DAMAGE_MODEL"
+        ]
+      }
+    }
+  },
+  "status": {
+    "cdc": {
+      "pending_transactions": 0,
+      "waiting_epoch": 0,
+      "checked_age_s": 6,
+      "connector_state": "RUNNING",
+      "task_state": "RUNNING",
+      "slot_active": true,
+      "retained_wal_bytes": 12547664,
+      "last_error": null,
+      "stale": false
+    },
+    "sources": {
+      "feed": {
+        "last_attempt_age_s": null,
+        "last_ok_age_s": null,
+        "last_error": null,
+        "watermark": null,
+        "last_new_revisions": null,
+        "stale": true
+      },
+      "incremental": {
+        "last_attempt_age_s": null,
+        "last_ok_age_s": null,
+        "last_error": null,
+        "watermark": null,
+        "last_new_revisions": null,
+        "stale": true
+      }
+    },
+    "captures_pending": 0,
+    "quarantine_total": 0,
+    "quarantine_24h": 0,
+    "detail_requests_pending": 0,
+    "detail_requests_failed": 0,
+    "grids_rejected": 0,
+    "grids_retrying": 0,
+    "grids_failed": 0,
+    "events_active": {
+      "REPLAY": 269
+    },
+    "jobs_pending": 0,
+    "jobs_failed": 0,
+    "publications_outdated": 0,
+    "generated_at": "2026-10-09T22:53:18.001Z"
+  },
+  "all_jobs_drained_seconds": 377.862,
+  "memory": [
+    {
+      "BlockIO": "229kB / 0B",
+      "CPUPerc": "0.21%",
+      "Container": "8a4ee816337d5487fa5f195688e8eb2a277975388371646bd40d147e4adbf79a",
+      "ID": "8a4ee816337d",
+      "MemPerc": "0.36%",
+      "MemUsage": "57.34MiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-api-1",
+      "NetIO": "23.4MB / 37.9MB",
+      "PIDs": "7"
+    },
+    {
+      "BlockIO": "106kB / 0B",
+      "CPUPerc": "2.25%",
+      "Container": "e4080eed8613de3d1f4d9eb018a13bd20878cdef101fcf229d6a2035d4491a8e",
+      "ID": "e4080eed8613",
+      "MemPerc": "0.43%",
+      "MemUsage": "68.18MiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-cdc-1",
+      "NetIO": "53.4MB / 33.1MB",
+      "PIDs": "6"
+    },
+    {
+      "BlockIO": "7.03MB / 2.83MB",
+      "CPUPerc": "2.03%",
+      "Container": "995d3eaec50d42713fda5a04e108dc378fe566c39cd29bc27d3bf299a286a8bd",
+      "ID": "995d3eaec50d",
+      "MemPerc": "6.83%",
+      "MemUsage": "1.062GiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-connect-1",
+      "NetIO": "3.99MB / 13.4MB",
+      "PIDs": "70"
+    },
+    {
+      "BlockIO": "5.39MB / 21.4MB",
+      "CPUPerc": "3.06%",
+      "Container": "342dcc303e10e2a992c5b6091c73ad04d44b5113f0ce38b14deffa5880d096d0",
+      "ID": "342dcc303e10",
+      "MemPerc": "2.56%",
+      "MemUsage": "408.2MiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-kafka-1",
+      "NetIO": "13.6MB / 13.8MB",
+      "PIDs": "121"
+    },
+    {
+      "BlockIO": "57.2MB / 3.9GB",
+      "CPUPerc": "0.75%",
+      "Container": "5d33830c6448f5975744714ced5fdb6c0a5da7f07564e450b9edf48a1b7b6368",
+      "ID": "5d33830c6448",
+      "MemPerc": "2.71%",
+      "MemUsage": "431.6MiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-platform-db-1",
+      "NetIO": "424MB / 485MB",
+      "PIDs": "11"
+    },
+    {
+      "BlockIO": "1.36MB / 98.8MB",
+      "CPUPerc": "1.38%",
+      "Container": "f84684cb172f8d6aeb74b04fed1cbc196b4c680385f008687e2987c1b64f4d62",
+      "ID": "f84684cb172f",
+      "MemPerc": "0.35%",
+      "MemUsage": "56.33MiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-source-db-1",
+      "NetIO": "3.46MB / 3.47MB",
+      "PIDs": "12"
+    },
+    {
+      "BlockIO": "4.57MB / 0B",
+      "CPUPerc": "1.88%",
+      "Container": "d0153d319378498bdaad33354cfac3689e2bb92181e2325ffaee2cfc91806a74",
+      "ID": "d0153d319378",
+      "MemPerc": "0.26%",
+      "MemUsage": "41.59MiB / 15.56GiB",
+      "Name": "qe-cold-808cc8ac-worker-1",
+      "NetIO": "421MB / 387MB",
+      "PIDs": "2"
+    }
+  ],
+  "completed_at": "2026-10-09T22:53:22.487323+00:00",
+  "cleanup": "",
+  "method": {
+    "timer_started_before": "docker compose up -d --no-build --pull never cdc",
+    "readiness": "First COMPLETE publication observed through loopback API for REPLAY us7000tiur",
+    "repetitions": 1,
+    "concurrent_load": "Persistent QuakeExposure verification, integration test stack, and other projects were active.",
+    "cleanup_completed": true,
+    "live_collector_started": false,
+    "worktree_note": "Image rebuilt at bb230de before measurement; documentation and test files had uncommitted changes."
+  },
+  "memory_total_mib_approx": 2150.73,
+  "host_processor": "AMD Ryzen 7 5700X3D 8-Core Processor",
+  "host_ram_bytes": 34239365120
+}

@@ -21,6 +21,10 @@ docker compose up -d --build cdc                   # origem, Kafka, Connect e co
 docker compose run --rm --no-deps worker qe bootstrap # seed via CDC e REPLAY
 docker compose exec worker qe portfolio correct --tenant <t> --interval <i> --lon <x> --lat <y>
 docker compose exec worker qe demo
+docker compose exec worker qe erase <subject_token>
+docker compose run --rm --no-deps maintenance qe backup
+docker compose run --rm --no-deps maintenance qe restore-verify /data/backups/<backup>
+docker compose exec worker qe verify-demo --commit <sha-40> --output /data/backups/verify-demo.json
 docker compose exec worker qe explain <eventid> --tenant <t> --mode <m> --scope <s>
 docker compose exec worker qe bench --rounds 10    # precisa do worker rodando
 cd web && npm ci && npm test && npm run build      # página: TS strict + Vite + Leaflet
@@ -145,4 +149,21 @@ Código em `exposure/`: `jobs.py` (escopo e marcação), `worker.py` (cálculo e
 - Offset Kafka só é confirmado depois dos commits de stage e aplicação. Reentrega não avança epoch nem cria publicação nova. Payload aplicado é descartado, a chave e o hash ficam.
 - `control.cdc_stage` e `privacy` não são legíveis pela API. `cdc/monitor.py` consulta Connect e WAL do slot, sem expor dados da carteira.
 - O loader `portfolio.store.load` é só para testes. A CLI semeia pela origem.
+
+## Exclusão e restauração
+
+- `privacy/erasure.py`: bloqueio na origem, ledger com fsync, BLOCKED na plataforma, purge e recibo CLOSED. Cada fase pode ser retomada sem subir outra privacy_epoch.
+- O ledger fica em volume separado dos bancos. Guarda identificadores mínimos para reaplicar bloqueios; não armazena contato, localização ou valor.
+- A aplicação CDC e a exclusão compartilham o lock `cdc-apply`. Payload de titular bloqueado é sanitizado antes de entrar no stage; exclusão sanitiza também o stage pendente.
+- A API mantém uma transação por requisição e lock compartilhado por tenant. O bloqueio de exclusão usa o lock exclusivo correspondente. Publicação de privacy_epoch antiga responde 409.
+- O worker filtra titulares bloqueados e verifica privacy_epoch no CAS. Exclusão invalida todos os jobs do tenant, inclusive fora da janela LIVE.
+- A página só aceita respostas do ciclo de atualização mais recente; um erro 409 atrasado não limpa uma seleção nova.
+- `privacy/backup.py` usa pg_dump/pg_restore 18. `restore-verify` verifica os hashes e reaplica o ledger atual em `qe_restore`, sem CONNECT para a API. Nunca substitui um banco sem sua marca de verificação.
+- Restore e exclusão serializam o acesso ao ledger pelo lock `erase-ledger`. Dump e WAL podem manter resíduos; o recibo registra essa limitação e a retenção Kafka de sete dias.
+
+## Verificação final
+
+- `qe verify-demo` valida os hashes das capturas, executa os cinco passos e grava commit, seed e asserções em JSON. O coletor deve ficar parado nessa execução.
+- CI: unitários, propriedades, contratos, PostGIS como service, integração Compose, frontend e auditorias. `QE_TEST_EXTERNAL_DATABASE=1` usa o service PostgreSQL descartável do CI; não aponta para banco de uso real.
+- O runbook está em `docs/operacao.md`; medições e resultados em `docs/results/`. Não apresentar workflow ainda não executado no GitHub como aprovado remotamente.
 

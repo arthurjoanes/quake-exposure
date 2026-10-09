@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 import psycopg
 import pytest
+from psycopg import sql
 
 from quakeexposure.cli import SECRET_NAMES
 from quakeexposure.db import ROOT, connect
@@ -32,6 +33,7 @@ PROJECT = f"qe-it-{uuid.uuid4().hex[:8]}"
 @dataclass(frozen=True)
 class Database:
     secrets_dir: Path
+    external: bool = False
 
     def connect(self, user: str = "qe_pipeline") -> psycopg.Connection[Any]:
         return connect(user=user, password_file=str(self.secrets_dir / user))
@@ -46,14 +48,49 @@ def _compose(env: dict[str, str], *args: str) -> str:
     return done.stdout
 
 
+def _external_database(secrets_dir: Path) -> Database:
+    """Service PostgreSQL descartável de CI; o fixture não chama Docker nesse modo."""
+    (secrets_dir / "postgres").write_text(os.environ["QE_TEST_POSTGRES_PASSWORD"], "utf-8")
+    with psycopg.connect(
+        host=os.environ.get("QE_DB_HOST", "127.0.0.1"),
+        port=int(os.environ.get("QE_DB_PORT", "5432")),
+        dbname="qe",
+        user="postgres",
+        password=os.environ["QE_TEST_POSTGRES_PASSWORD"],
+        autocommit=True,
+    ) as admin:
+        for role in ("qe_owner", "qe_pipeline", "qe_api_read"):
+            if admin.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone() is None:
+                admin.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(role)))
+            admin.execute(
+                sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                    sql.Identifier(role), sql.Literal((secrets_dir / role).read_text("utf-8"))
+                )
+            )
+        admin.execute("ALTER DATABASE qe OWNER TO qe_owner")
+        admin.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+        admin.execute("CREATE EXTENSION IF NOT EXISTS btree_gist")
+        admin.execute("ALTER ROLE qe_pipeline SET statement_timeout = '60s'")
+        admin.execute("ALTER ROLE qe_pipeline SET idle_in_transaction_session_timeout = '60s'")
+        admin.execute("ALTER ROLE qe_api_read SET default_transaction_read_only = on")
+        admin.execute("ALTER ROLE qe_api_read SET statement_timeout = '10s'")
+    db = Database(secrets_dir, external=True)
+    with db.connect("qe_owner") as conn:
+        migrate(conn)
+    return db
+
+
 @pytest.fixture(scope="session")
 def database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Database]:
-    docker = shutil.which("docker")
-    if docker is None or subprocess.run([docker, "info"], capture_output=True).returncode != 0:  # noqa: S603
-        pytest.skip("Docker indisponível: os testes de integração usam o PostGIS real")
     secrets_dir = tmp_path_factory.mktemp("secrets")
     for name in SECRET_NAMES:
         (secrets_dir / name).write_text(secrets.token_urlsafe(18), "utf-8")
+    if os.environ.get("QE_TEST_EXTERNAL_DATABASE") == "1":
+        yield _external_database(secrets_dir)
+        return
+    docker = shutil.which("docker")
+    if docker is None or subprocess.run([docker, "info"], capture_output=True).returncode != 0:  # noqa: S603
+        pytest.skip("Docker indisponível: os testes de integração usam o PostGIS real")
     env = {**os.environ, "QE_SECRETS_DIR": str(secrets_dir)}
     try:
         _compose(env, "up", "-d", "--wait", "platform-db")

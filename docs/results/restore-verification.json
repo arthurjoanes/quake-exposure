@@ -1,0 +1,13 @@
+{
+  "database": "qe_restore",
+  "verified_at": "2026-10-09T22:51:58.700947+00:00",
+  "ledger_subjects": 1,
+  "reapplied": {
+    "subjects": 1,
+    "revisions": 0,
+    "facts": 0
+  },
+  "subjects_absent": true,
+  "api_cannot_connect": true,
+  "source_restore": "Restauração da origem exige repetir qe erase para o ledger."
+}
