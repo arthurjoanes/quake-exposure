@@ -3,49 +3,60 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="data:," />
-    <title>QuakeExposure</title>
+    <meta name="description" content="Exposição de carteiras a terremotos: mapa, intensidade MMI, valores por moeda e histórico de classificação." />
+    <meta name="theme-color" content="#14344b" />
+    <link rel="icon" type="image/svg+xml" href="/brand/quake-exposure-mark.svg" />
+    <title>QuakeExposure — exposição de carteiras a terremotos</title>
   </head>
   <body>
-    <header>
-      <h1>QuakeExposure</h1>
+    <header class="app-header">
+      <div class="brand"><img class="brand-mark" src="/brand/quake-exposure-mark.svg" width="48" height="48" alt="" /><div><h1>QuakeExposure</h1><p>Exposição de carteiras a terremotos</p></div></div>
+      <div class="header-state"><span class="dataset-note">Carteira fictícia</span><span id="clock" role="status"></span></div>
+    </header>
+    <nav class="filters" aria-label="Filtros da análise">
       <label>Escopo
         <select id="scope">
           <option value="LIVE">LIVE</option>
-          <option value="REPLAY">REPLAY</option>
+          <option value="REPLAY" selected>REPLAY</option>
           <option value="FAULT">FAULT</option>
         </select>
       </label>
-      <label>Tenant <select id="tenant"></select></label>
-      <label>Evento <select id="event"></select></label>
-      <label>Modo
+      <label>Carteira <select id="tenant"></select></label>
+      <label class="event-filter">Terremoto <select id="event"></select></label>
+      <label>Critério
         <select id="mode">
-          <option value="RADIUS_TRIAGE">RADIUS_TRIAGE (100 km)</option>
-          <option value="SHAKEMAP_MMI">SHAKEMAP_MMI (MMI ≥ 6,0)</option>
+          <option value="RADIUS_TRIAGE">Raio de 100 km</option>
+          <option value="SHAKEMAP_MMI">Intensidade MMI ≥ 6,0</option>
         </select>
       </label>
-      <span id="clock"></span>
-    </header>
+    </nav>
     <div id="scope-note" class="strip" hidden></div>
     <div id="stale" class="strip" hidden></div>
     <main>
+      <div class="analysis-view">
       <div id="map-wrap">
-        <div id="map"></div>
+        <div class="map-heading"><div><h2>Visão geográfica</h2><span id="map-density" class="muted">Selecione um terremoto para analisar a carteira.</span></div><div class="map-actions"><button id="focus-event" type="button" disabled>Centralizar evento</button><button id="fit-assets" type="button" disabled>Ver carteira</button></div></div>
+        <div id="map" aria-label="Mapa de terremotos e ativos da carteira"></div>
         <div class="legend">
-          <span class="dot q"></span>classificado
-          <span class="dot e"></span>elegível
-          <span class="dot n"></span>não elegível
-          <span class="dot ev"></span>evento
+          <span><i class="dot q"></i>Classificado</span>
+          <span><i class="dot e"></i>Elegível, não classificado</span>
+          <span><i class="dot n"></i>Não elegível</span>
+          <span><i class="dot ev"></i>Terremoto</span>
         </div>
+        <p id="map-base-status" class="map-base-status" role="status"></p>
       </div>
-      <aside>
-        <section id="event-panel"></section>
-        <section id="summary"></section>
-        <section id="diff"></section>
+      <section id="summary" aria-label="Resumo da publicação"></section>
+      </div>
+      <section id="charts" aria-label="Gráficos de exposição"></section>
+      <div class="details-grid">
         <section id="assets"></section>
-      </aside>
+        <aside class="context-panels">
+        <section id="event-panel"></section>
+        <section id="diff"></section>
+        </aside>
+      </div>
     </main>
-    <footer>Terremotos e ShakeMap: USGS. Carteira fictícia. Mapa-base: Natural Earth.</footer>
+    <footer><span>Terremotos e ShakeMap: USGS. Carteira fictícia. Valores separados por moeda.</span><span>Mapa: OpenStreetMap / Natural Earth.</span></footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

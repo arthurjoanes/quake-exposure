@@ -1,8 +1,5 @@
 import "leaflet/dist/leaflet.css";
 import "./style.css";
-import * as L from "leaflet";
-import { feature } from "topojson-client";
-import land from "world-atlas/land-110m.json";
 import {
   type ApiStatus,
   type Asset,
@@ -19,7 +16,9 @@ import {
   type Scope,
   type Tenant,
 } from "./api";
-import { near, planar } from "./basemap";
+import { AssetList } from "./asset-list";
+import { renderCharts } from "./charts";
+import { QuakeMap } from "./map-view";
 import { formatMinor } from "./money";
 import { PublicationSync } from "./publication";
 import { LatestRefresh } from "./refresh";
@@ -46,8 +45,6 @@ const SCOPE_NOTE: Record<Scope, string> = {
   FAULT: "FAULT: dados com mutação de teste.",
 };
 
-const COLOR = { qualifying: "#c0392b", eligible: "#2c6fa6", other: "#9a9a9a", event: "#6a3d9a" };
-
 const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const e = document.getElementById(id);
   if (!e) throw new Error(`#${id} não existe`);
@@ -65,37 +62,42 @@ const eventPanel = el("event-panel");
 const summaryBox = el("summary");
 const diffBox = el("diff");
 const assetsBox = el("assets");
+const chartsBox = el("charts");
+const focusButton = el<HTMLButtonElement>("focus-event");
+const fitButton = el<HTMLButtonElement>("fit-assets");
+const initialParams = new URLSearchParams(location.search);
+if (["LIVE", "REPLAY", "FAULT"].includes(initialParams.get("scope") ?? "")) scopeSel.value = initialParams.get("scope")!;
+if (["RADIUS_TRIAGE", "SHAKEMAP_MMI"].includes(initialParams.get("mode") ?? "")) modeSel.value = initialParams.get("mode")!;
 
 const state = {
   events: [] as QuakeEvent[],
   revisions: [] as Revision[],
-  uid: "",
+  uid: initialParams.get("event") ?? "",
   shown: null as CurrentPublication | null, // publicação cujos ativos, resumo e diff estão na tela
 };
 const sync = new PublicationSync();
 const refreshes = new LatestRefresh();
 let eventSignature = "";
+let initialSelection = true;
 
 // ---------- mapa ----------
 
-const map = L.map("map", { minZoom: 1, maxZoom: 12 }).setView([15, 0], 2);
-map.createPane("land").style.zIndex = "200";
-map.createPane("assets").style.zIndex = "350";
-const landFc = feature(land, land.objects.land);
-const landPolygons = ("features" in landFc ? landFc.features : [landFc]).flatMap((f) =>
-  f.geometry.type === "MultiPolygon" ? f.geometry.coordinates : f.geometry.type === "Polygon" ? [f.geometry.coordinates] : [],
-);
-const landGeometry = { type: "MultiPolygon" as const, coordinates: planar(landPolygons) };
-L.geoJSON(landGeometry, {
-  pane: "land",
-  interactive: false,
-  attribution: "Natural Earth",
-  style: { color: "#a9b19c", weight: 0.6, fillColor: "#eceee4", fillOpacity: 1 },
-}).addTo(map);
-const assetRenderer = L.canvas({ pane: "assets" });
-const assetLayer = L.layerGroup().addTo(map);
-const eventLayer = L.layerGroup().addTo(map);
-map.on("moveend", () => drawEvents()); // eventos perto de ±180 seguem a cópia que está na tela
+const map = new QuakeMap("map", {
+  onSelect: selectEvent,
+  onBaseStatus: (message) => { el("map-base-status").textContent = message; },
+  onDensityChange: ({ assets, groups, clustered }) => {
+    fitButton.disabled = assets === 0;
+    el("map-density").textContent = assets === 0
+      ? "Selecione um terremoto para analisar a carteira."
+      : clustered
+        ? `${assets.toLocaleString("pt-BR")} ativos em ${groups.toLocaleString("pt-BR")} pontos e grupos. Amplie para separar.`
+        : `${assets.toLocaleString("pt-BR")} ativos. Selecione um ponto para ver os detalhes.`;
+  },
+});
+const assetList = new AssetList(assetsBox, (asset) => {
+  map.focusAsset(asset);
+  el("map-wrap").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+});
 
 // ---------- formatação ----------
 
@@ -105,16 +107,12 @@ const num = (x: number | null, digits: number): string =>
 const utc = (iso: string | null): string =>
   iso === null ? "–" : `${iso.slice(0, 19).replace("T", " ")} UTC`;
 const shortId = (id: string): string => `<code title="${esc(id)}">${esc(id.slice(0, 12))}</code>`;
-const count = (n: number | null): string => (n === null ? "–" : String(n));
+const count = (n: number | null): string => (n === null ? "–" : n.toLocaleString("pt-BR"));
 const mmiChange = (i: DiffItem): string =>
   i.mmi_before === null && i.mmi_after === null ? "" : `MMI ${num(i.mmi_before, 2)} → ${num(i.mmi_after, 2)}`;
 const eventLabel = (e: QuakeEvent): string =>
   `${utc(e.event_time)} · M ${num(e.mag, 1)} · ${e.preferred_id}` +
   (e.lifecycle === "RETRACTED" ? " · retirado" : "");
-
-const rank = (a: Asset): number => (a.qualifying ? 0 : a.eligible ? 1 : 2);
-const situation = ["classificado", "elegível", "não elegível"];
-const rankColor = [COLOR.qualifying, COLOR.eligible, COLOR.other];
 
 const selection = () => ({
   scope: scopeSel.value as Scope,
@@ -123,6 +121,12 @@ const selection = () => ({
   mode: modeSel.value as Mode,
 });
 const selectionKey = (): string => Object.values(selection()).join("|");
+function rememberSelection(): void {
+  const s = selection();
+  const params = new URLSearchParams({ scope: s.scope, tenant: s.tenant, mode: s.mode });
+  if (s.uid) params.set("event", s.uid);
+  history.replaceState(null, "", `${location.pathname}?${params}`);
+}
 
 // ---------- eventos ----------
 
@@ -140,23 +144,8 @@ function renderEventOptions(): void {
 }
 
 function drawEvents(): void {
-  eventLayer.clearLayers();
-  const center = map.getCenter().lng;
-  for (const e of state.events) {
-    const selected = e.earthquake_uid === state.uid;
-    const retracted = e.lifecycle === "RETRACTED";
-    L.circleMarker([e.lat, near(e.lon, center)], {
-      radius: 4 + Math.max(0, e.mag ?? 0) * 1.5,
-      color: selected ? "#000" : COLOR.event,
-      weight: selected ? 3 : 1.5,
-      fillColor: COLOR.event,
-      fillOpacity: retracted ? 0 : 0.25,
-      dashArray: retracted ? "3 3" : undefined,
-    })
-      .bindTooltip(esc(eventLabel(e)))
-      .on("click", () => selectEvent(e.earthquake_uid))
-      .addTo(eventLayer);
-  }
+  map.setEvents(state.events, state.uid);
+  focusButton.disabled = !state.events.some((event) => event.earthquake_uid === state.uid);
 }
 
 function renderEventPanel(): void {
@@ -180,7 +169,7 @@ function renderEventPanel(): void {
       <dt>Horário</dt><dd>${esc(utc(e.event_time))}</dd>
       <dt>Magnitude</dt><dd>${num(e.mag, 1)}</dd>
       <dt>Profundidade</dt><dd>${e.depth_km === null ? "–" : `${num(e.depth_km, 1)} km`}</dd>
-      <dt>Lifecycle</dt><dd>${e.lifecycle === "RETRACTED" ? "RETRACTED (retirado pelo USGS)" : "ACTIVE"}</dd>
+      <dt>Situação</dt><dd>${e.lifecycle === "RETRACTED" ? "Retirado pelo USGS" : "Ativo"}</dd>
       <dt>Mapa escolhido</dt><dd>${e.product_revision_id ? `<code>${esc(e.product_revision_id)}</code>` : "sem ShakeMap"}</dd>
       <dt>Resultado</dt><dd>${result ? `${result.status} (${STATUS_TEXT[result.status]})` : "sem publicação"}</dd>
     </dl>
@@ -198,32 +187,29 @@ const scopeBadge = (s: Scope): string => (s === "LIVE" ? "" : `<span class="badg
 interface View {
   summary: string;
   diff: string;
-  assets: string;
-  markers: L.CircleMarker[];
+  charts: string;
+  assets: Asset[];
 }
 
 /** Monta tudo antes de tocar na tela: se algum valor for inválido, nada muda. */
 function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffResponse): View {
   const r = pub.result;
   const event = state.events.find((e) => e.earthquake_uid === r.input_vector.earthquake_uid);
-  const center = event?.lon ?? map.getCenter().lng;
   const totals = r.qualifying_value_minor;
   const summary = `
-    <h2>Publicação ${scopeBadge(r.input_vector.stream_scope)}</h2>
-    <dl>
-      <dt>Status</dt><dd>${r.status} (${STATUS_TEXT[r.status]})</dd>
-      <dt>Elegíveis</dt><dd>${count(r.eligible_count)}</dd>
-      <dt>Classificados</dt><dd>${count(r.qualifying_count)}</dd>
-      <dt>Valor classificado BRL</dt><dd class="money">${totals ? formatMinor(totals.BRL, "BRL") : "–"}</dd>
-      <dt>Valor classificado USD</dt><dd class="money">${totals ? formatMinor(totals.USD, "USD") : "–"}</dd>
+    <div class="summary-heading"><h2>Exposição ${scopeBadge(r.input_vector.stream_scope)}</h2><span class="result-status">${STATUS_TEXT[r.status]}</span></div>
+    <p class="summary-event"><strong>${esc(event?.preferred_id ?? "Terremoto")}</strong>${esc(event ? utc(event.event_time) : "")}</p>
+    <dl class="summary-counts"><div class="classified"><dt>Classificados</dt><dd>${count(r.qualifying_count)}</dd></div><div><dt>Elegíveis</dt><dd>${count(r.eligible_count)}</dd></div></dl>
+    <dl class="currency-values"><div><dt>Valor classificado em BRL</dt><dd>${totals ? formatMinor(totals.BRL, "BRL") : "–"}</dd></div><div><dt>Valor classificado em USD</dt><dd>${totals ? formatMinor(totals.USD, "USD") : "–"}</dd></div></dl>
+    <p class="muted">${MODE_NOTE[r.input_vector.mode]}</p>
+    <details class="publication-details"><summary>Detalhes da publicação</summary><dl>
+      <dt>Status</dt><dd>${r.status}</dd>
       <dt>Mapa usado</dt><dd>${r.input_vector.product_revision_id === "NONE" ? "nenhum (raio)" : `<code>${esc(r.input_vector.product_revision_id)}</code>`}</dd>
       <dt>Geração</dt><dd>${pub.generation}</dd>
       <dt>Calculada em</dt><dd>${esc(utc(r.calculated_at))}</dd>
       <dt>Publicada em</dt><dd>${esc(utc(r.published_at))}</dd>
       <dt>Publicação</dt><dd>${shortId(pub.publication_id)}</dd>
-    </dl>
-    <p class="muted">${MODE_NOTE[r.input_vector.mode]}</p>
-    <p class="muted">Limitações: ${r.limitations.map((l) => `<code>${esc(l)}</code>`).join(" ") || "–"}</p>`;
+    </dl><p class="muted">Limitações: ${r.limitations.map((l) => `<code>${esc(l)}</code>`).join(" ") || "–"}</p></details>`;
 
   const diffList = (title: string, items: DiffItem[]): string => {
     const shown = items.slice(0, 100);
@@ -246,53 +232,24 @@ function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffRespon
     ${diffList("Entraram", diff.entered)}
     ${diffList("Saíram", diff.left)}`;
 
-  const sorted = [...assets.assets].sort((a, b) => rank(a) - rank(b));
-  const assetRows = sorted
-    .map((a) => {
-      const k = rank(a);
-      return (
-        `<tr class="r${k}"><td>${esc(a.asset_id)}</td><td class="money">${formatMinor(a.insured_value_minor, a.currency)}</td>` +
-        `<td>${num(a.mmi, 2)}</td><td>${situation[k]}</td></tr>`
-      );
-    })
-    .join("");
-  const nQualifying = sorted.filter((a) => a.qualifying).length;
-  const assetsHtml = `
-    <h2>Ativos (${sorted.length}, ${nQualifying} classificados)</h2>
-    <div class="scroll"><table>
-      <thead><tr><th>Ativo</th><th>Valor segurado</th><th>MMI</th><th>Situação</th></tr></thead>
-      <tbody>${assetRows}</tbody>
-    </table></div>`;
-
-  // não classificados primeiro: os classificados ficam por cima no canvas
-  const markers = [...sorted].reverse().map((a) => {
-    const k = rank(a);
-    const tip = `${a.asset_id} · ${formatMinor(a.insured_value_minor, a.currency)}` +
-      (a.mmi === null ? "" : ` · MMI ${num(a.mmi, 2)}`) + ` · ${situation[k]}`;
-    return L.circleMarker([a.lat, near(a.lon, center)], {
-      renderer: assetRenderer,
-      radius: k === 0 ? 4 : 3,
-      weight: 0,
-      fillColor: rankColor[k],
-      fillOpacity: 0.85,
-    }).bindTooltip(esc(tip));
-  });
-
-  return { summary, diff: diffHtml, assets: assetsHtml, markers };
+  return { summary, diff: diffHtml, assets: assets.assets, charts: renderCharts(pub, assets, diff) };
 }
 
 function paint(pub: CurrentPublication | null, view: View | null, message = ""): void {
   state.shown = pub;
-  assetLayer.clearLayers();
   if (view) {
-    for (const m of view.markers) m.addTo(assetLayer);
+    const event = state.events.find((event) => event.earthquake_uid === state.uid);
+    if (pub) map.setAssets(view.assets, pub.publication_id, pub.result.input_vector.mode, event);
     summaryBox.innerHTML = view.summary;
     diffBox.innerHTML = view.diff;
-    assetsBox.innerHTML = view.assets;
+    chartsBox.innerHTML = view.charts;
+    assetList.setAssets(view.assets);
   } else {
-    summaryBox.innerHTML = `<h2>Publicação</h2><p class="muted">${esc(message)}</p><p class="muted">${MODE_NOTE[modeSel.value as Mode]}</p>`;
+    map.clearAssets();
+    assetList.clear();
+    summaryBox.innerHTML = `<h2>Exposição</h2><p class="muted">${esc(message)}</p><p class="muted">${MODE_NOTE[modeSel.value as Mode]}</p>`;
     diffBox.innerHTML = "";
-    assetsBox.innerHTML = "";
+    chartsBox.innerHTML = `<div class="chart-empty"><p>${esc(message)} Os gráficos acompanham a publicação selecionada.</p></div>`;
   }
   renderEventPanel();
 }
@@ -363,8 +320,10 @@ async function refresh(): Promise<void> {
       const tenants = (await get<Tenant[]>("/api/tenants")) ?? [];
       if (!isCurrent()) return;
       tenantSel.replaceChildren(...tenants.map((t) => new Option(`${t.name} (${t.tenant_id})`, t.tenant_id)));
+      const preferred = initialParams.get("tenant");
+      if (preferred && tenants.some((tenant) => tenant.tenant_id === preferred)) tenantSel.value = preferred;
     }
-    const key = selectionKey();
+    let key = selectionKey();
     const { scope } = selection();
     const [status, events] = await Promise.all([
       get<ApiStatus>("/api/status"),
@@ -373,6 +332,17 @@ async function refresh(): Promise<void> {
     if (!isCurrent() || key !== selectionKey()) return;
     if (status) renderStale(status);
     state.events = events ?? [];
+    if (initialSelection) {
+      initialSelection = false;
+      const initialEvent = state.events.find((event) => event.earthquake_uid === state.uid)
+        ?? (scope === "REPLAY" ? state.events.find((event) => event.preferred_id === "us7000tiur") : undefined);
+      if (initialEvent) {
+        state.uid = initialEvent.earthquake_uid;
+        key = selectionKey();
+        map.focusEvent(initialEvent);
+      }
+      rememberSelection();
+    }
     if (state.uid && !state.events.some((e) => e.earthquake_uid === state.uid)) {
       state.uid = ""; // saiu da lista (outro escopo ou fundido em outro evento)
       changed();
@@ -411,6 +381,7 @@ async function tick(): Promise<void> {
 }
 
 function changed(): void {
+  rememberSelection();
   sync.reset();
   paint(null, null, "Carregando.");
   void tick();
@@ -420,7 +391,7 @@ function selectEvent(uid: string): void {
   state.uid = uid;
   eventSel.value = uid;
   const e = state.events.find((x) => x.earthquake_uid === uid);
-  if (e) map.setView([e.lat, near(e.lon, map.getCenter().lng)], Math.max(map.getZoom(), 6));
+  if (e) map.focusEvent(e);
   drawEvents();
   changed();
 }
@@ -434,6 +405,14 @@ scopeSel.addEventListener("change", () => {
 tenantSel.addEventListener("change", changed);
 modeSel.addEventListener("change", changed);
 eventSel.addEventListener("change", () => selectEvent(eventSel.value));
+focusButton.addEventListener("click", () => {
+  const event = state.events.find((event) => event.earthquake_uid === state.uid);
+  if (event) map.focusEvent(event);
+});
+fitButton.addEventListener("click", () => map.fitAssets());
 
+scopeNote.textContent = SCOPE_NOTE[scopeSel.value as Scope];
+scopeNote.className = `strip ${scopeSel.value}`;
+scopeNote.hidden = scopeSel.value === "LIVE";
 paint(null, null, "Escolha um evento.");
 void tick();

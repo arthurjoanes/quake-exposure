@@ -10,3 +10,15 @@ e o sha256 de cada um estão em tests/fixtures/manifest.json.
 
 Grids de ShakeMap de outras redes (ak, ci etc.) não são distribuídos neste
 repositório. O scripts/fetch_fixtures.py baixa esses arquivos da fonte.
+
+Mapa online: © OpenStreetMap contributors.
+Créditos e licença dos dados: https://www.openstreetmap.org/copyright
+Tiles: https://tile.openstreetmap.org/, sujeitos à política de uso do serviço:
+https://operations.osmfoundation.org/policies/tiles/
+
+Mapa offline: Natural Earth, domínio público, via world-atlas (countries-50m).
+Fonte: https://www.naturalearthdata.com/about/terms-of-use/
+world-atlas: https://github.com/topojson/world-atlas (ISC).
+
+Marca, logotipo e banner QuakeExposure: Arthur Joanes, 2026.
+Os arquivos SVG próprios acompanham a licença MIT deste repositório.

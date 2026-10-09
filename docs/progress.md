@@ -254,3 +254,21 @@ Commits locais desta continuação: `e4aaa1c` (CDC, tag v0.2), `bb230de` (exclus
 A instância entregue está em `http://127.0.0.1:8000`, projeto Compose `quake-exposure-v03`, com os bancos, Kafka, Connect, CDC, worker e API. O coletor não foi iniciado. Ao fechar a verificação: zero transações CDC pendentes, zero cálculos pendentes/com lease/esgotados e zero quarentenas. Os volumes da v0.1 foram preservados; os projetos temporários de teste e medição são removidos ao terminar.
 
 Pendência externa: criar o repositório remoto e autorizar o push dos commits e tags. O CI está configurado; nenhuma execução no GitHub foi feita. Nenhuma requisição ao USGS nesta continuação. Nenhuma nova decisão de escopo.
+
+## Interface, identidade visual e apresentação (2026-10-09)
+
+Implementação e validação local concluídas. Repositório público criado em `arthurjoanes/quake-exposure`, com descrição, tópicos e destino dos commits configurado. A pendência de autorização no fechamento do M6 acima registra o estado daquela entrega; o pedido posterior do Arthur inclui finalizar a apresentação no Git.
+
+- Marca própria em SVG: símbolo Q com ondas concêntricas, logotipo horizontal e banner de apresentação. A paleta usa azul profundo, verde-petróleo e coral; os mesmos significados de cor aparecem no mapa, nos gráficos e na legenda. Arquivos em `web/public/brand/` e `docs/assets/banner.svg`.
+- Mapa online com ruas e localidades do OpenStreetMap; base offline Natural Earth com países e costa em 1:50 milhões. Agrupamento por zoom, cache por publicação, eventos persistentes e desenho em Canvas reduzem a reconstrução de camadas. O mapa continua tratando o antimeridiano.
+- Gráficos de composição dos ativos, valores por moeda, faixas de MMI e entradas/saídas. Os dados são conferidos contra a mesma publicação; ausência de mapa não vira zero. BRL e USD mantêm denominadores próprios e valores inteiros até a formatação.
+- Listas de ativos, revisões e mudanças preservadas. A tabela de ativos desenha 50 ou 100 linhas por página, com busca por ID, filtros de situação e moeda e localização no mapa. A seleção de escopo, carteira, evento e critério fica na URL.
+- README em português e inglês com banner, captura da aplicação, arquitetura Mermaid, tabela de decisões, comandos, resultados e autoria. A estrutura segue os projetos API Sentinel, EvidenceDesk e ContainerOps do portfólio. O badge consulta o workflow do próprio repositório.
+
+Validação da interface: 80 testes passaram; TypeScript strict e build Vite concluíram. Os testes cobrem agregação monetária com BigInt, coerência de publicação, agrupamento e paginação com mais de 20.000 ativos. A suíte Python de 307 testes permanece registrada no M6; esta atualização não altera o backend.
+
+A base online faz requisições de tiles ao OpenStreetMap; os dados da carteira permanecem na API local. Não foram feitas novas requisições ao USGS. Créditos das bases e da marca estão em `NOTICE`.
+
+Conferência no navegador: modos RADIUS e MMI, totais por moeda, busca por ID, paginação, filtros combinados, localização de ativo no mapa e alternância online/offline. No modo MMI, a Operadora B tem 4.999 ativos, 1.972 elegíveis e 45 classificados; o filtro de classificados em USD retorna 38. A lista desenha 50 linhas por padrão. Layout a 390 pixels sem rolagem horizontal da página; a tabela tem rolagem própria. Ajustado o redimensionamento do mapa para preservar o centro. Sem erros ou avisos no console. [Painel](results/ui-overview.png), [gráficos](results/ui-map-charts.png), [listas](results/ui-assets.png) e [celular](results/ui-mobile-charts.png).
+
+Imagem Docker reconstruída e API atualizada em `quake-exposure-v03`; volumes e outros projetos preservados. A referência do setup-uv no CI usa o commit da versão 7.6.0, em vez do objeto de tag anotada. O resultado remoto é consultado no [workflow do repositório](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml); os números de testes acima descrevem as execuções locais.
