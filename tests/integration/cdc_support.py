@@ -79,7 +79,12 @@ class CdcStack:
     def capture(
         self, action: Callable[[], Any], *, transactions: int = 1, timeout: float = 30
     ) -> list[Record]:
-        """Obtém payloads originais: offsets atuais antes do comando e barreira pelos ENDs."""
+        """Obtém apenas transações da ação, mesmo com WAL anterior ainda não publicado.
+
+        Os offsets Kafka não são uma barreira da origem: o Connect pode estar atrasado.
+        Dois XIDs reservados na origem delimitam os commits produzidos pela ação. As
+        chamadas são sequenciais neste fixture; os XIDs fora da janela são descartados.
+        """
         consumer = Consumer(
             {
                 "bootstrap.servers": self.bootstrap_servers,
@@ -95,7 +100,11 @@ class CdcStack:
                 _, high = consumer.get_watermark_offsets(TopicPartition(topic, 0), timeout=10)
                 partitions.append(TopicPartition(topic, 0, high))
             consumer.assign(partitions)
+            lower_xid = self._xid_boundary()
             action()
+            upper_xid = self._xid_boundary()
+            span = upper_xid - lower_xid
+            assert 0 < span < 2**32, "janela de captura excedeu uma volta do XID"
             records: list[Record] = []
             ends: dict[str, int] = {}
             rows: Counter[str] = Counter()
@@ -110,6 +119,16 @@ class CdcStack:
                 assert value is not None and received_topic is not None
                 payload = json.loads(value)
                 topic = received_topic
+                transaction_id = (
+                    payload["id"]
+                    if topic == "portfolio.transaction"
+                    else payload["transaction"]["id"]
+                )
+                xid = int(transaction_id.split(":", 1)[0])
+                # pg_current_xact_id retorna xid8; o protocolo lógico usa os 32 bits
+                # baixos. A distância modular mantém a barreira válida no wrap.
+                if not 0 < (xid - lower_xid) % (2**32) < span:
+                    continue
                 records.append((topic, payload))
                 if topic == "portfolio.transaction":
                     if payload["status"] == "END":
@@ -120,9 +139,18 @@ class CdcStack:
                     rows[tx] == count for tx, count in ends.items()
                 ):
                     return records
-            raise AssertionError(f"CDC incompleto: END={ends}, linhas={dict(rows)}")
+            raise AssertionError(
+                f"CDC incompleto para XIDs ({lower_xid}, {upper_xid}): "
+                f"END={ends}, linhas={dict(rows)}"
+            )
         finally:
             consumer.close()
+
+    def _xid_boundary(self) -> int:
+        with self.source("qe_source_owner") as source:
+            row = source.execute("SELECT pg_current_xact_id()::text").fetchone()
+            assert row is not None
+            return int(row[0])
 
 
 @pytest.fixture(scope="session")

@@ -175,17 +175,15 @@ def create_app(
     def status(conn: Db) -> dict[str, Any]:
         now = datetime.now(UTC)
         r = report(conn, now)
-        jobs = conn.execute(
-            """SELECT count(*) FILTER (WHERE desired_generation > published_generation
-                                             AND attempts < 5),
-                      count(*) FILTER (WHERE desired_generation > published_generation
-                                             AND attempts >= 5),
-                      count(*) FILTER (WHERE published_generation > 0
-                                             AND desired_generation > published_generation)
-               FROM control.exposure_job"""
+        outdated = conn.execute(
+            """SELECT count(*) FROM control.exposure_job
+               WHERE published_generation > 0 AND desired_generation > published_generation"""
         ).fetchone()
-        assert jobs is not None
-        r["jobs_pending"], r["jobs_failed"], r["publications_outdated"] = jobs
+        assert outdated is not None
+        jobs = r["exposure_jobs"]
+        r["jobs_pending"] = jobs["pending"] + jobs["leased"]
+        r["jobs_failed"] = jobs["exhausted"]
+        r["publications_outdated"] = outdated[0]
         r["generated_at"] = iso_ms(now)
         return r
 
