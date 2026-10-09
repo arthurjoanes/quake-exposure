@@ -137,7 +137,9 @@ Código em `exposure/`: `jobs.py` (escopo e marcação), `worker.py` (cálculo e
 - `/api/events` traz primeiro os eventos com publicação; o limite (até 2.000) corta só os sem cálculo.
 - Evento retirado publica RETRACTED; fundido ou fora da regra sai de `serving.current_publication` (linha nula em `serving.publication_log`).
 - Fatos e serving nunca têm `subject_token`; o papel `qe_api_read` não lê `portfolio.asset_revision`.
-- Página: mapa e valores sempre da mesma publicação; dinheiro só como string.
+- Página: mapa, gráficos, listas e valores sempre da mesma publicação; dinheiro só como string, agregação monetária em BigInt. Filtros e paginação da lista não alteram o total dos gráficos.
+- Mapa: Canvas, agrupamentos por zoom e cache por publicação; polling sem mudança não recria camadas. OpenStreetMap para ruas e lugares, Natural Earth 1:50m como alternativa offline. Manter atribuição visível e não fazer pré-carga de tiles.
+- Identidade visual: ativos SVG em `web/public/brand/`, apresentação em `docs/assets/`; paleta em `docs/identidade-visual.md`. Cores de mapa, gráficos e legenda devem corresponder.
 
 ## CDC da carteira
 
