@@ -129,6 +129,8 @@ class CdcStack:
 def cdc_stack(database: Database) -> CdcStack:
     from .conftest import _compose
 
+    if database.external:
+        pytest.fail("teste CDC exige projeto Compose; não pertence ao job PostGIS isolado")
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         kafka_port = listener.getsockname()[1]

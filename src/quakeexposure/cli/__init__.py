@@ -33,6 +33,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("bootstrap", help="semeia a origem e aguarda a carteira pelo CDC")
     p.add_argument("--assets", type=int, default=10_000)
     p.add_argument("--seed", type=int, default=42)
+    p = sub.add_parser("erase", help="bloqueia e exclui um titular, com recibo")
+    p.add_argument("subject_token")
+    p = sub.add_parser("backup", help="pg_dump das duas bases (serviço maintenance)")
+    p.add_argument(
+        "--directory", type=Path, default=Path(os.environ.get("QE_BACKUP_DIR", "backups"))
+    )
+    p = sub.add_parser("restore-verify", help="restaura em qe_restore e reaplica o ledger atual")
+    p.add_argument("directory", type=Path)
     sub.add_parser("collect", help="roda o coletor do USGS sem parar")
     p = sub.add_parser("backfill", help="busca no FDSN dia a dia, com cursor por dia")
     p.add_argument("--from", dest="first", type=date.fromisoformat, required=True)
@@ -62,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     sub.add_parser("demo", help="demonstração: replay, revisão FAULT e job velho recusado")
+    p = sub.add_parser("verify-demo", help="roda os cinco passos e grava as asserções em JSON")
+    p.add_argument("--commit", required=True)
+    p.add_argument("--output", type=Path, default=Path("docs/results/verify-demo.json"))
     p = sub.add_parser("bench", help="tempo de revisão aplicada até publicação (worker rodando)")
     p.add_argument("--rounds", type=int, default=5)
 
@@ -83,6 +94,28 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from quakeexposure.db import connect
+
+    if args.command in ("erase", "backup", "restore-verify"):
+        from uuid import UUID
+
+        from quakeexposure.portfolio.source import connect_source
+        from quakeexposure.privacy.backup import backup, restore_verify
+        from quakeexposure.privacy.erasure import erase
+        from quakeexposure.privacy.ledger import Ledger
+
+        if args.command == "restore-verify":
+            password = os.environ.get("QE_POSTGRES_PASSWORD_FILE")
+            with connect(user="postgres", password_file=password) as admin:
+                verified = restore_verify(admin, args.directory, Ledger())
+            print(json.dumps(verified, indent=2, ensure_ascii=False))
+        else:
+            with connect() as platform, connect_source() as source:
+                if args.command == "erase":
+                    receipt = erase(platform, source, UUID(args.subject_token))
+                    print(json.dumps(receipt, indent=2, ensure_ascii=False))
+                else:
+                    print(backup(platform, source, args.directory))
+        return 0
 
     if args.command == "cdc":
         from quakeexposure.cdc.consumer import run_forever as run_cdc
@@ -152,6 +185,13 @@ def main(argv: list[str] | None = None) -> int:
     from quakeexposure.ingestion.blobs import BlobStore
 
     blobs = BlobStore(Path(os.environ.get("QE_BLOB_DIR", "data/blobs")))
+    if args.command == "verify-demo":
+        from quakeexposure.verification import verify_demo
+
+        with connect() as conn:
+            verify_demo(conn, connect, blobs, commit=args.commit, output=args.output)
+        print(f"resultado salvo: {args.output}")
+        return 0
     if args.command == "replay":
         from quakeexposure.ingestion.replay import replay
 

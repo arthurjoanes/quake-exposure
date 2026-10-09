@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
-from confluent_kafka import Consumer
+from confluent_kafka import OFFSET_INVALID, Consumer, TopicPartition
 from psycopg.pq import TransactionStatus
 
 from quakeexposure.cdc.monitor import refresh
@@ -23,11 +23,57 @@ class Message(Protocol):
     def error(self) -> Any: ...
 
 
+class AssignmentConsumer(Protocol):
+    def committed(
+        self, partitions: list[TopicPartition], *, timeout: float
+    ) -> list[TopicPartition]: ...
+    def get_watermark_offsets(
+        self, partition: TopicPartition, *, timeout: float
+    ) -> tuple[int, int]: ...
+    def assign(self, partitions: list[TopicPartition]) -> None: ...
+
+
+type AssignmentCallback = Callable[[AssignmentConsumer, list[TopicPartition]], None]
+
+
 class KafkaConsumer(Protocol):
-    def subscribe(self, topics: list[str]) -> None: ...
+    def subscribe(self, topics: list[str], *, on_assign: AssignmentCallback) -> None: ...
     def poll(self, timeout: float) -> Message | None: ...
     def commit(self, *, message: Message, asynchronous: bool) -> Any: ...
     def close(self) -> None: ...
+
+
+def assign_checked(consumer: AssignmentConsumer, partitions: list[TopicPartition]) -> None:
+    """Nunca pula um buraco criado por retenção ou truncamento do log.
+
+    Um grupo sem offset pode iniciar em zero somente quando todo o histórico ainda
+    está disponível. Isso também permite replay após crash antes do primeiro ack.
+    """
+    committed = consumer.committed(partitions, timeout=10)
+    if {(p.topic, p.partition) for p in committed} != {(p.topic, p.partition) for p in partitions}:
+        raise CdcError("Kafka não devolveu todos os offsets; recuse iniciar o CDC")
+    assigned = []
+    for partition in committed:
+        if partition.error is not None:
+            raise CdcError(f"não foi possível ler offset Kafka: {partition.error}")
+        if partition.topic not in TOPICS or partition.partition != 0:
+            raise CdcError("CDC exige somente os três tópicos configurados com uma partição")
+        low, high = consumer.get_watermark_offsets(partition, timeout=10)
+        offset = partition.offset
+        if offset == OFFSET_INVALID:
+            if low != 0:
+                raise CdcError(
+                    f"offset ausente e histórico expirado em {partition.topic}; reset manual"
+                )
+            offset = 0
+        if offset < low or offset > high:
+            raise CdcError(
+                f"offset {offset} fora do histórico [{low}, {high}] em {partition.topic}; "
+                "reset manual da origem e destino"
+            )
+        assigned.append(TopicPartition(partition.topic, partition.partition, offset))
+    # Valida a atribuição inteira antes de permitir qualquer consumo.
+    consumer.assign(assigned)
 
 
 def process_message(
@@ -92,13 +138,13 @@ def run_forever(
                     or os.environ.get("QE_CDC_GROUP_ID", "quake-exposure-cdc-v1"),
                     "enable.auto.commit": False,
                     "enable.auto.offset.store": False,
-                    "auto.offset.reset": "earliest",
+                    "auto.offset.reset": "error",
                 }
             ),
         )
     )
     try:
-        client.subscribe(list(TOPICS))
+        client.subscribe(list(TOPICS), on_assign=assign_checked)
         apply_pending(conn, now=clock())
         last_check = float("-inf")
         last_commit = monotonic()

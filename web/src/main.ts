@@ -12,6 +12,7 @@ import {
   type DiffResponse,
   get,
   type Mode,
+  PrivacyRecalculation,
   type QuakeEvent,
   type Revision,
   type ResultStatus,
@@ -388,6 +389,10 @@ async function refresh(): Promise<void> {
     clock.textContent = `atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     clock.classList.remove("error");
   } catch (err) {
+    if (err instanceof PrivacyRecalculation) {
+      sync.reset();
+      paint(null, null, err.message);
+    }
     clock.textContent = `erro: ${err instanceof Error ? err.message : String(err)}`;
     clock.classList.add("error");
   }

@@ -118,11 +118,16 @@ export interface ApiStatus {
   };
 }
 
+export class PrivacyRecalculation extends Error {
+  constructor() { super("Recalculando após exclusão."); }
+}
+
 /** GET relativo (mesma origem). null em 404; outro erro HTTP vira exceção. */
 export async function get<T>(path: string, params: Record<string, string> = {}): Promise<T | null> {
   const query = new URLSearchParams(params).toString();
   const r = await fetch(query ? `${path}?${query}` : path, { headers: { Accept: "application/json" } });
   if (r.status === 404) return null;
+  if (r.status === 409) throw new PrivacyRecalculation();
   if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
   return (await r.json()) as T;
 }

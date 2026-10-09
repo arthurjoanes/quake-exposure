@@ -1,6 +1,6 @@
 [project]
 name = "quake-exposure"
-version = "0.0.1"
+version = "0.3.0"
 description = "Exposição de uma carteira fictícia a terremotos do USGS (ShakeMap)"
 readme = "README.md"
 license = "MIT"

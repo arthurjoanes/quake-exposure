@@ -300,6 +300,11 @@ def _publish(conn: Conn, job: Job, vector: InputVector, at: datetime) -> None:
     )
     if cas.rowcount != 1:
         raise StaleJob  # job velho não publica
+    privacy = conn.execute(
+        "SELECT privacy_epoch FROM portfolio.tenant WHERE tenant_id = %s", (job.tenant_id,)
+    ).fetchone()
+    if privacy is None or privacy[0] != vector.privacy_epoch:
+        raise StaleJob
     previous = conn.execute(
         """SELECT calculation_id FROM serving.current_publication
            WHERE tenant_id = %s AND earthquake_uid = %s AND stream_scope = %s AND mode = %s

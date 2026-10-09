@@ -1,5 +1,8 @@
 .env
 .secrets/
+.privacy/
+.tmp-*/
+backups/
 data/
 tests/fixtures/external/
 .venv/

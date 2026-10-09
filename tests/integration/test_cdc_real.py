@@ -1,11 +1,17 @@
 """Gates M4: mensagens obtidas de PostgreSQL → Debezium → Kafka reais."""
 
+import time
 from datetime import timedelta
+from typing import cast
 from uuid import uuid4
 
+import pytest
 from builders import feature
+from confluent_kafka import Consumer, TopicPartition
 
-from quakeexposure.cdc import apply_pending, stage
+from quakeexposure.cdc import CdcError, apply_pending, stage
+from quakeexposure.cdc.consumer import AssignmentConsumer, assign_checked
+from quakeexposure.cdc.store import TOPICS
 from quakeexposure.domain.portfolio import assets_as_of
 from quakeexposure.ingestion.store import Conn
 from quakeexposure.portfolio.source import execute_command
@@ -127,3 +133,40 @@ def test_f13_real_debezium_move_and_retroactive_correction_use_event_time_and_ep
         assert [(a.asset_id, a.lon) for a in at_event] == [("a", expected_lon)]
     today = assets_as_of(versions, tenant_id=tenant, at=NOW, epoch=3)
     assert [(a.asset_id, a.lon) for a in today] == [("a", 20)]
+
+
+@pytest.mark.parametrize("lost_offset", [False, True])
+def test_real_kafka_assignment_initializes_new_group_and_refuses_lost_offsets(
+    cdc_stack: CdcStack, lost_offset: bool
+) -> None:
+    consumer = Consumer(
+        {
+            "bootstrap.servers": cdc_stack.bootstrap_servers,
+            "group.id": f"offset-check-{uuid4().hex}",
+            "enable.auto.commit": False,
+            "auto.offset.reset": "error",
+        }
+    )
+    assigned: list[bool] = []
+
+    def on_assign(client: Consumer, partitions: list[TopicPartition]) -> None:
+        assign_checked(cast(AssignmentConsumer, client), partitions)
+        assigned.append(True)
+
+    try:
+        if lost_offset:
+            consumer.commit(
+                offsets=[TopicPartition(topic, 0, 10**9) for topic in TOPICS], asynchronous=False
+            )
+        consumer.subscribe(list(TOPICS), on_assign=on_assign)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and not assigned:
+            try:
+                consumer.poll(0.2)
+            except CdcError as exc:
+                assert lost_offset and "reset manual" in str(exc)
+                assert not assigned
+                return
+        assert assigned and not lost_offset
+    finally:
+        consumer.close()

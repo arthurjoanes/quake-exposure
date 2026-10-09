@@ -9,7 +9,7 @@ import pytest
 from builders import feature
 
 from quakeexposure.cdc import CdcError, apply_pending, stage
-from quakeexposure.cdc.consumer import Message, process_message, run_forever
+from quakeexposure.cdc.consumer import AssignmentCallback, Message, process_message, run_forever
 from quakeexposure.exposure import jobs, worker
 from quakeexposure.ingestion.store import Conn
 
@@ -200,7 +200,7 @@ class CommitFailure:
         self.database = database
         self.commits = 0
 
-    def subscribe(self, topics: list[str]) -> None:
+    def subscribe(self, topics: list[str], *, on_assign: AssignmentCallback) -> None:
         pass
 
     def poll(self, timeout: float) -> Message | None:
@@ -309,7 +309,7 @@ def test_consumer_batches_offsets_only_after_each_topic_is_durable(
             self.committed: list[Message] = []
             self.closed = False
 
-        def subscribe(self, topics: list[str]) -> None:
+        def subscribe(self, topics: list[str], *, on_assign: AssignmentCallback) -> None:
             assert set(topics) == {ASSET, CLOCK, END}
 
         def poll(self, timeout: float) -> Message | None:
