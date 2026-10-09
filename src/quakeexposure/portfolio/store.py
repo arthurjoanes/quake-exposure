@@ -75,7 +75,9 @@ def versions_known(conn: Conn, tenant_id: str, epoch: int) -> list[AssetVersion]
     rows = conn.execute(
         """SELECT tenant_id, asset_interval_id, asset_id, row_version, known_epoch, valid_from,
                   valid_to, lon, lat, insured_value_minor, currency, is_deleted
-           FROM portfolio.asset_revision WHERE tenant_id = %s AND known_epoch <= %s""",
+           FROM portfolio.asset_revision r WHERE tenant_id = %s AND known_epoch <= %s
+             AND NOT EXISTS (SELECT 1 FROM privacy.erase_block b
+                             WHERE b.subject_token = r.subject_token)""",
         (tenant_id, epoch),
     ).fetchall()
     return [

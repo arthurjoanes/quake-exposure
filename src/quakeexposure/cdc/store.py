@@ -9,6 +9,7 @@ from uuid import UUID
 
 from psycopg.types.json import Jsonb
 
+from quakeexposure.cdc.privacy import stage_payload
 from quakeexposure.domain.rule import DEFAULT_RULE, Mode
 from quakeexposure.exposure import jobs
 from quakeexposure.ingestion.store import Conn
@@ -137,6 +138,9 @@ def stage(
     if not isinstance(transaction_id, str) or not transaction_id:
         raise CdcError("transaction_id CDC ausente")
     with conn.transaction():
+        # O bloqueio/purge usa o mesmo lock. Uma entrega simultânea à exclusão não
+        # pode gravar PII depois de o stage pendente ter sido redigido.
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext('quake-exposure:cdc-apply'))")
         conn.execute(
             """INSERT INTO control.cdc_transaction (transaction_id, first_seen_at)
                VALUES (%s, %s) ON CONFLICT DO NOTHING""",
@@ -174,7 +178,14 @@ def stage(
             """INSERT INTO control.cdc_stage
                    (transaction_id, total_order, collection, payload, payload_sha256, staged_at)
                VALUES (%s, %s, %s, %s, %s, %s)""",
-            (transaction_id, order, collection, Jsonb(message), fingerprint, now),
+            (
+                transaction_id,
+                order,
+                collection,
+                Jsonb(stage_payload(conn, message)),
+                fingerprint,
+                now,
+            ),
         )
     return True
 
@@ -297,7 +308,7 @@ def _apply(conn: Conn, transaction_id: str, now: datetime) -> bool:
                 key,
             )
             latest[key] = message
-            if message["op"] == "d":
+            if message["op"] == "d" or message.get("erased"):
                 conn.execute(
                     """DELETE FROM portfolio.asset_revision
                        WHERE tenant_id = %s AND asset_interval_id = %s""",
@@ -306,7 +317,7 @@ def _apply(conn: Conn, transaction_id: str, now: datetime) -> bool:
             else:
                 _revision(conn, row, clocks[key[0]])
         for message in latest.values():
-            if message["op"] != "d":
+            if message["op"] != "d" and not message.get("erased"):
                 _interval(conn, message["after"])
         for tenant_id, clock in sorted(clocks.items()):
             changed = conn.execute(

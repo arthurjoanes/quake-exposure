@@ -31,7 +31,7 @@ def create_app(
     app = FastAPI(title="QuakeExposure", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
     def db() -> Iterator[Conn]:
-        with connector() as conn:
+        with connector() as conn, conn.transaction():
             yield conn
 
     Db = Annotated[Conn, Depends(db)]
@@ -119,6 +119,7 @@ def create_app(
         if row is None:
             raise HTTPException(404, "sem publicação para este evento, tenant e modo")
         calc_id, generation, published_at = row
+        _own(conn, calc_id, tenant)
         return {
             "publication_id": calc_id,
             "generation": generation,
@@ -156,6 +157,11 @@ def create_app(
         """Antes e depois: a publicação anterior desta mesma chave e o que mudou."""
         _own(conn, publication_id, tenant)
         before = previous(conn, publication_id)
+        if before is not None:
+            try:
+                _own(conn, before, tenant)
+            except HTTPException:
+                before = None
         d = diff(conn, before, publication_id)
         return {
             "publication_id": publication_id,
@@ -189,13 +195,23 @@ def create_app(
 
 
 def _own(conn: Conn, publication_id: str, tenant: str) -> tuple[str, UUID, str, str]:
+    # Mantido até o fim da resposta: block/purge não pode mudar a privacy_epoch
+    # entre este guard e as leituras de fatos, totais e diff.
+    conn.execute(
+        "SELECT pg_advisory_xact_lock_shared(hashtextextended(%s, 0))",
+        (f"privacy-api:{tenant}",),
+    )
     row = conn.execute(
-        """SELECT tenant_id, earthquake_uid, stream_scope, mode FROM exposure.calculation
-           WHERE calculation_id = %s""",
+        """SELECT c.tenant_id, c.earthquake_uid, c.stream_scope, c.mode,
+                  c.privacy_epoch = t.privacy_epoch
+           FROM exposure.calculation c JOIN portfolio.tenant t USING (tenant_id)
+           WHERE c.calculation_id = %s""",
         (publication_id,),
     ).fetchone()
     if row is None or row[0] != tenant:
         raise HTTPException(404, "publicação não encontrada para este tenant")
+    if not row[4]:
+        raise HTTPException(409, "recalculando após exclusão")
     return row[0], row[1], row[2], row[3]
 
 

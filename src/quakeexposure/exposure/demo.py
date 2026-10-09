@@ -9,12 +9,14 @@
 import gzip
 import hashlib
 import json
+import os
 import random
 import statistics
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID, uuid4
 
 from quakeexposure.domain.rule import Mode
 from quakeexposure.exposure import jobs, worker
@@ -36,7 +38,7 @@ def demo(
     blobs: BlobStore,
     out: Out = print,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
-) -> None:
+) -> dict[str, Any]:
     ensure_portfolio(conn, out)
 
     out("1. replay da captura real e cálculo inicial")
@@ -44,6 +46,16 @@ def demo(
     out(f"   capturas gravadas {done.stored}, já existiam {done.already}")
     _drain(conn, blobs, now)
     _summary(conn, "REPLAY", out)
+    initial = conn.execute(
+        """SELECT c.status FROM serving.current_publication p
+           JOIN exposure.calculation c USING(calculation_id)
+           JOIN quake.alias a ON a.stream_scope=p.stream_scope
+                              AND a.earthquake_uid=p.earthquake_uid
+           WHERE p.stream_scope='REPLAY' AND a.provider_id=%s""",
+        (EVENT,),
+    ).fetchall()
+    assert len(initial) == 2 * len(portfolio.tenants(conn))
+    assert all(status == "COMPLETE" for (status,) in initial)
 
     out("2. revisão FAULT que muda a exposição")
     detail, grid = _fixture("detail_us7000tiur"), _fixture("grid_us7000tiur")
@@ -106,6 +118,92 @@ def demo(
         (tenant, uid, Mode.RADIUS_TRIAGE),
     ).fetchone()
     out(f"   publicada a geração {published[0] if published else '-'}")
+    receipt = _erase_step(conn, blobs, now, out)
+    return {
+        "replay_calculated": True,
+        "duplicate_preserved_publication": same,
+        "portfolio_cdc_asof": True,
+        "stale_generation_refused": result == "stale",
+        "erasure_closed": receipt["status"] == "CLOSED",
+        "old_cdc_did_not_restore_subject": True,
+    }
+
+
+def _erase_step(
+    conn: Conn, blobs: BlobStore, now: Callable[[], datetime], out: Out
+) -> dict[str, Any]:
+    from confluent_kafka import Consumer, TopicPartition
+
+    from quakeexposure.bootstrap import wait_for_epoch
+    from quakeexposure.cdc import apply_pending, stage
+    from quakeexposure.portfolio.source import connect_source
+    from quakeexposure.privacy.erasure import erase
+
+    out("5. exclusão de titular e reentrega de uma mensagem CDC antiga")
+    with connect_source() as source:
+        row = source.execute(
+            """SELECT tenant_id, asset_id, subject_token FROM public.asset_interval
+               WHERE NOT is_deleted ORDER BY tenant_id, asset_interval_id LIMIT 1"""
+        ).fetchone()
+        assert row is not None
+        tenant, asset_id, token = row
+        topic = "portfolio.public.asset_interval"
+        consumer = Consumer(
+            {
+                "bootstrap.servers": os.environ.get("QE_KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
+                "group.id": f"qe-demo-{uuid4().hex}",
+                "enable.auto.commit": False,
+            }
+        )
+        old: bytes | None = None
+        try:
+            low, _ = consumer.get_watermark_offsets(TopicPartition(topic, 0), timeout=10)
+            consumer.assign([TopicPartition(topic, 0, low)])
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                message = consumer.poll(0.2)
+                if message is None:
+                    continue
+                if message.error():
+                    raise RuntimeError(str(message.error()))
+                payload = message.value()
+                if payload is None:
+                    raise RuntimeError("tombstone inesperado na demonstração CDC")
+                record = json.loads(payload)
+                after = record.get("after")
+                if after and after.get("subject_token") == str(token):
+                    old = payload
+                    break
+        finally:
+            consumer.close()
+        if old is None:
+            raise RuntimeError("mensagem antiga não está na retenção do Kafka; refaça o bootstrap")
+        receipt = erase(conn, source, UUID(str(token)))
+        clock = source.execute(
+            "SELECT epoch, source_epoch FROM public.portfolio_clock WHERE tenant_id=%s", (tenant,)
+        ).fetchone()
+        assert clock is not None
+        wait_for_epoch(conn, tenant, clock[0], clock[1])
+        stage(conn, topic, old, now=now())
+        apply_pending(conn, now=now())
+        assert source.execute(
+            "SELECT count(*) FROM public.asset_interval WHERE subject_token=%s", (token,)
+        ).fetchone() == (0,)
+    _drain(conn, blobs, now)
+    assert conn.execute(
+        "SELECT count(*) FROM portfolio.asset_revision WHERE subject_token=%s", (token,)
+    ).fetchone() == (0,)
+    assert conn.execute(
+        """SELECT count(*) FROM exposure.fact f JOIN exposure.calculation c USING(calculation_id)
+           WHERE c.tenant_id=%s AND f.asset_id=%s""",
+        (tenant, asset_id),
+    ).fetchone() == (0,)
+    out(f"   {tenant}/{asset_id}: excluído; CDC antigo não recriou o ativo")
+    out(
+        f"   recibo {receipt['request_id']}: {receipt['status']}; "
+        "resíduos: Kafka 7 dias, WAL e dumps"
+    )
+    return receipt
 
 
 def _portfolio_step(conn: Conn, blobs: BlobStore, now: Callable[[], datetime], out: Out) -> None:
@@ -237,19 +335,25 @@ def _fixture(name: str) -> bytes:
     return gzip.decompress((MANIFEST.parent / entry["path"]).read_bytes())
 
 
-def _drain(conn: Conn, blobs: BlobStore, now: Callable[[], datetime], timeout: float = 120) -> None:
+def _drain(conn: Conn, blobs: BlobStore, now: Callable[[], datetime], timeout: float = 600) -> None:
     """Roda o worker até a fila esvaziar. Com o worker do Compose no ar, ele pode pegar parte dos
     jobs: aqui também se espera por esses."""
     deadline = time.monotonic() + timeout
     while True:
-        worker.run_pending(conn, blobs, now)
+        done = worker.run_pending(conn, blobs, now, limit=100)
+        if done["failed"]:
+            raise RuntimeError("um cálculo falhou durante a demonstração")
         row = conn.execute(
-            """SELECT count(*) FROM control.exposure_job
-               WHERE desired_generation > published_generation AND attempts < %s""",
+            """SELECT count(*), count(*) FILTER (WHERE attempts >= %s)
+               FROM control.exposure_job WHERE desired_generation > published_generation""",
             (worker.MAX_ATTEMPTS,),
         ).fetchone()
-        if row is None or row[0] == 0 or time.monotonic() > deadline:
+        if row is not None and row[1]:
+            raise RuntimeError(f"{row[1]} cálculos parados após falhas")
+        if row is None or row[0] == 0:
             return
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"demonstração aguardando {row[0]} publicações")
         time.sleep(0.2)
 
 
