@@ -17,7 +17,9 @@ docker compose exec collector qe status
 docker compose exec collector qe replay
 docker compose exec collector qe backfill --from 2026-10-01 --to 2026-10-07
 docker compose exec collector qe watch add <eventid>
-docker compose exec worker qe portfolio seed       # carteira fictícia (carga direta)
+docker compose up -d --build cdc                   # origem, Kafka, Connect e consumidor
+docker compose run --rm --no-deps worker qe bootstrap # seed via CDC e REPLAY
+docker compose exec worker qe portfolio correct --tenant <t> --interval <i> --lon <x> --lat <y>
 docker compose exec worker qe demo
 docker compose exec worker qe explain <eventid> --tenant <t> --mode <m> --scope <s>
 docker compose exec worker qe bench --rounds 10    # precisa do worker rodando
@@ -132,4 +134,15 @@ Código em `exposure/`: `jobs.py` (escopo e marcação), `worker.py` (cálculo e
 - Evento retirado publica RETRACTED; fundido ou fora da regra sai de `serving.current_publication` (linha nula em `serving.publication_log`).
 - Fatos e serving nunca têm `subject_token`; o papel `qe_api_read` não lê `portfolio.asset_revision`.
 - Página: mapa e valores sempre da mesma publicação; dinheiro só como string.
+
+## CDC da carteira
+
+- `portfolio/source.py` escreve na origem por funções SECURITY DEFINER; o writer não faz DML direto. Cada comando tem UUID idempotente, trava o clock do tenant e avança uma epoch.
+- `source_epoch` é inteiro. Origem carregada parcialmente exige reset manual; `ops.seed_status()` distingue seed terminado de interrupção entre lotes.
+- Debezium PostgreSQL 3.6.2, `pgoutput`, `snapshot.mode=no_data`, publicação manual de `public.asset_interval` e `public.portfolio_clock`. Contatos e deduplicação ficam fora.
+- `cdc/store.py`: stage por transação e ordem total; END pode chegar antes das linhas. Só aplica com contagens exatas e epoch seguinte. Sem clock ou `op=r`: erro explícito.
+- O ID bruto Debezium traz XID:LSN, com LSN diferente por linha. A chave interna usa XID e timestamp de commit (`source.ts_ms` = END `ts_ms`), conferidos no smoke real.
+- Offset Kafka só é confirmado depois dos commits de stage e aplicação. Reentrega não avança epoch nem cria publicação nova. Payload aplicado é descartado, a chave e o hash ficam.
+- `control.cdc_stage` e `privacy` não são legíveis pela API. `cdc/monitor.py` consulta Connect e WAL do slot, sem expor dados da carteira.
+- O loader `portfolio.store.load` é só para testes. A CLI semeia pela origem.
 

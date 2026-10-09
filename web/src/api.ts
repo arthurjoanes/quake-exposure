@@ -109,6 +109,13 @@ export interface ApiStatus {
   jobs_pending: number;
   jobs_failed: number;
   publications_outdated: number;
+  cdc?: {
+    connector_state: string;
+    task_state: string;
+    pending_transactions: number;
+    retained_wal_bytes: number | null;
+    stale: boolean;
+  };
 }
 
 /** GET relativo (mesma origem). null em 404; outro erro HTTP vira exceção. */

@@ -4,7 +4,7 @@ Cruza terremotos do USGS e os mapas de intensidade deles (ShakeMap) com uma cart
 
 Dois modos, nunca misturados: RADIUS_TRIAGE (ativos até 100 km do epicentro; proximidade, não intensidade) e SHAKEMAP_MMI (MMI do grid no ponto do ativo; classificado com MMI ≥ 6,0). São regras de triagem do projeto. Não é previsão, alerta nem modelo de dano ou perda; o USGS já publica ShakeMap e ShakeCast.
 
-Estado: v0.1. Há coleta do USGS, cálculo e publicação de exposição, API somente leitura e a página. O CDC da carteira e a exclusão de titular vêm depois. O andamento está em [docs/progress.md](docs/progress.md).
+Estado: v0.2. Há coleta do USGS, cálculo e publicação de exposição, CDC real da carteira, API somente leitura e a página. O andamento está em [docs/progress.md](docs/progress.md).
 
 ## Rodar
 
@@ -13,11 +13,12 @@ Precisa do [uv](https://docs.astral.sh/uv/) e do Docker com Compose. O Python ve
 ```bash
 uv sync
 uv run qe secrets
-docker compose up -d --build
-docker compose exec worker qe portfolio seed
+docker compose up -d --build cdc
+docker compose run --rm --no-deps worker qe bootstrap
+docker compose up -d worker api
 ```
 
-O `qe secrets` cria as senhas em `.secrets/` (fora do Git). O `docker compose up` sobe o PostGIS, aplica as migrações e liga o coletor (feed a cada 60 s, FDSN a cada 10 min), o worker e a API. O `portfolio seed` carrega a carteira fictícia: 10.000 ativos em 2 tenants, BRL e USD, a maior parte em volta dos eventos de demo.
+O `qe secrets` cria as senhas em `.secrets/` (fora do Git). O bootstrap aguarda o slot do Debezium, semeia a origem por comandos, espera o CDC e carrega as capturas REPLAY. São 10.000 ativos em 2 tenants, BRL e USD. Uma carteira antiga da carga direta exige outro projeto Compose; os volumes antigos podem ser mantidos. Para coletar dados novos do USGS, execute `docker compose up -d collector`.
 
 A página fica em http://127.0.0.1:8000. A API não tem login e só escuta em 127.0.0.1; o tenant é filtro, não autorização.
 
@@ -32,7 +33,7 @@ docker compose exec collector qe backfill --from 2026-10-01 --to 2026-10-07
 docker compose exec collector qe watch add us7000tiur
 ```
 
-- `demo`: replay das capturas reais e cálculo inicial; revisão FAULT que muda a exposição e a mesma captura de novo sem efeito; cálculo velho recusado pela geração.
+- `demo`: replay, revisão FAULT, duplicata sem efeito, correção da carteira pelo CDC com comparação as-of e cálculo velho recusado pela geração.
 - `explain`: o vetor de entrada da publicação atual e os ativos que entraram e saíram desde a anterior, com a causa.
 - `bench`: tempo de revisão aplicada até publicação. O resultado medido está em [docs/results/](docs/results/).
 
@@ -51,7 +52,7 @@ uv run mypy
 cd web && npm ci && npm test && npm run build
 ```
 
-Os testes não acessam a rede. Os de `tests/integration/` sobem um PostGIS num projeto Compose próprio e derrubam no fim; sem Docker eles são pulados.
+Os testes não acessam a rede externa. Os de `tests/integration/` sobem PostGIS, PostgreSQL, Kafka e Debezium em um projeto Compose próprio e derrubam no fim; sem Docker eles são pulados.
 
 ## Limitações
 
@@ -59,7 +60,7 @@ Os testes não acessam a rede. Os de `tests/integration/` sobem um PostGIS num p
 - O polling não vê toda revisão intermediária do USGS, só as que estavam publicadas quando o feed foi lido.
 - Sem login nem TLS entre containers. A API serve só em 127.0.0.1.
 - O LIVE calcula só eventos com ShakeMap dos últimos 7 dias e os da watchlist; os outros são ingeridos sem cálculo.
-- A carteira entra por carga direta; o CDC da origem ainda não existe.
+- Slot perdido ou offsets expirados exigem reset manual da origem e do destino.
 
 ## Dados e licença
 

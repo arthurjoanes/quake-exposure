@@ -345,6 +345,9 @@ function renderStale(s: ApiStatus): void {
   }
   if (s.jobs_failed > 0) lines.push(`${s.jobs_failed} cálculos parados após 5 tentativas.`);
   if (s.publications_outdated > 0) lines.push(`${s.publications_outdated} publicações aguardando recálculo.`);
+  if (s.cdc?.stale) {
+    lines.push(`Carteira desatualizada: CDC ${s.cdc.connector_state}; ${s.cdc.pending_transactions} transações pendentes.`);
+  }
   staleBox.hidden = lines.length === 0;
   staleBox.innerHTML = lines.map((l) => `<div>${esc(l)}</div>`).join("");
 }

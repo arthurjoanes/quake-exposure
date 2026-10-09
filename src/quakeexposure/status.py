@@ -34,7 +34,40 @@ def report(conn: Conn, now: datetime) -> dict[str, Any]:
         row = conn.execute(sql, params).fetchone()
         return int(row[0]) if row else 0
 
+    health = conn.execute(
+        """SELECT checked_at, connector_state, task_state, slot_active,
+                  retained_wal_bytes, last_error FROM control.cdc_health WHERE singleton"""
+    ).fetchone()
+    checked, connector, task, slot, wal, error = health or (
+        None,
+        "UNKNOWN",
+        "UNKNOWN",
+        None,
+        None,
+        None,
+    )
+    cdc = {
+        "pending_transactions": count(
+            "SELECT count(*) FROM control.cdc_transaction WHERE applied_at IS NULL"
+        ),
+        "waiting_epoch": count(
+            """SELECT count(*) FROM control.cdc_transaction
+               WHERE applied_at IS NULL AND waiting_reason IS NOT NULL"""
+        ),
+        "checked_age_s": _age(now, checked),
+        "connector_state": connector,
+        "task_state": task,
+        "slot_active": slot,
+        "retained_wal_bytes": wal,
+        "last_error": error,
+        "stale": checked is None
+        or now - checked > timedelta(seconds=30)
+        or connector != "RUNNING"
+        or task != "RUNNING"
+        or slot is not True,
+    }
     return {
+        "cdc": cdc,
         "sources": sources,
         "captures_pending": count(
             "SELECT count(*) FROM control.capture WHERE projected_at IS NULL"
@@ -86,6 +119,10 @@ def format_report(r: dict[str, Any]) -> str:
             line += f"; watermark {s['watermark']}; {s['last_new_revisions']} revisões novas"
         lines.append(line)
     lines += [
+        f"CDC: conector {r['cdc']['connector_state']}, tarefa {r['cdc']['task_state']}; "
+        f"{r['cdc']['pending_transactions']} transações pendentes; "
+        f"WAL retido {r['cdc']['retained_wal_bytes']} bytes"
+        + (" (desatualizado)" if r["cdc"]["stale"] else ""),
         f"capturas não projetadas: {r['captures_pending']}",
         f"quarentena: {r['quarantine_total']} ({r['quarantine_24h']} nas últimas 24 h)",
         f"details pendentes: {r['detail_requests_pending']}"

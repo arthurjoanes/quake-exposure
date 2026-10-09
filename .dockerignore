@@ -8,5 +8,6 @@ data
 .mypy_cache
 .ruff_cache
 .hypothesis
+.tmp-cdc-smoke
 web/node_modules
 web/dist
