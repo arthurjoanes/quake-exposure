@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.12.23"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest tests/unit tests/property
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.19.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm audit --audit-level=low
+
+  postgis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgis:
+        image: postgis/postgis:18-3.6
+        env:
+          POSTGRES_DB: qe
+          POSTGRES_PASSWORD: integration-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d qe"
+          --health-interval 2s --health-timeout 3s --health-retries 60
+    env:
+      QE_TEST_EXTERNAL_DATABASE: "1"
+      QE_TEST_POSTGRES_PASSWORD: integration-only
+      QE_DB_HOST: 127.0.0.1
+      QE_DB_PORT: "5432"
+      QE_DB_NAME: qe
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.12.23"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Test platform against service PostgreSQL
+        run: >-
+          uv run pytest tests/integration
+          --ignore=tests/integration/test_source.py
+          --ignore=tests/integration/test_cdc_infra.py
+          --ignore=tests/integration/test_cdc_real.py
+          --ignore=tests/integration/test_cdc_capture.py
+          --ignore=tests/integration/test_erasure.py
+          --ignore=tests/integration/test_backup.py
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.12.23"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: docker info
+      - run: uv run pytest tests/integration
+
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.12.23"
+      - name: Audit Python lockfile
+        run: |
+          uv export --frozen --all-groups --no-emit-project --format requirements-txt --output-file /tmp/qe-audit.txt > /dev/null
+          uvx pip-audit==2.10.1 --disable-pip --require-hashes -r /tmp/qe-audit.txt
+      - name: Scan Git history for secrets
+        run: docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1 git --redact --no-banner --gitleaks-ignore-path /repo/.gitleaksignore /repo

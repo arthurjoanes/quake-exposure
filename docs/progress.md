@@ -236,3 +236,21 @@ Demo completa em `bb230de`: oito asserções passaram, incluindo soma dos fatos,
 Página conferida no build atualizado: `us7000tiur`, REPLAY, Operadora B e SHAKEMAP_MMI; 1.972 elegíveis, 45 classificados, BRL 864.346,66 e USD 5.147.876,70. Sem erros no console. [Captura da página](results/ui-v0.3.png).
 
 Requisições ao USGS: zero. A coleta ao vivo ficou parada. O recibo informa retenção Kafka de sete dias e resíduos em WAL/dumps; não há limpeza automática de backups.
+
+## M6: CI, operação e verificação final (2026-10-09)
+
+Concluído.
+
+- `.github/workflows/ci.yaml`: Ruff, formatação, mypy, unitários, propriedades, contratos, frontend, PostGIS como service, integrações Compose e auditorias. Ações fixadas por SHA. O modo de service PostgreSQL passou nos 86 testes existentes; o teste de status foi acrescentado depois, totalizando 87 selecionados nesse job.
+- `README.md` e `README.en.md`: produto, execução, testes e limitações. `docs/operacao.md`: carga inicial, fonte atrasada, CDC/slot/offset perdido, worker parado, exclusão e restauração. Três ADRs registram as decisões de Kafka, CAS e exclusão contra replay.
+- `qe verify-demo`: commit, seed 42, hashes das capturas e oito asserções em [results/verify-demo.json](results/verify-demo.json). Resultado da execução em `bb230de`; as correções posteriores tratam sincronização da interface, helper de testes e contadores de status.
+- Bootstrap com volumes vazios e imagens em cache: 183,814 s até carteira/REPLAY; 356,907 s até as quatro publicações da demo; 377,862 s até drenar os 998 jobs. RAM observada: aproximadamente 2,10 GiB. Máquina, carga concorrente e método em [results/m6-bootstrap-cold.md](results/m6-bootstrap-cold.md).
+- `pip-audit` 2.10.1 verificou todas as dependências do lockfile; `npm audit` verificou o lockfile da página. Nenhuma vulnerabilidade conhecida reportada. Gitleaks 8.30.1 não encontrou credenciais após a exclusão exata de um UUID fixo histórico do builder, documentada em `.gitleaksignore`. Actionlint 1.7.12 passou.
+
+Validação final: `uv run pytest -q --durations=10` terminou com 307 passed em 609,93 s, sem skips. Houve um aviso de depreciação do Starlette sobre o transporte httpx do TestClient. As duas falhas da primeira rodada foram corrigidas no helper de captura, mantendo as asserções dos testes. Ruff passou; 98 arquivos com formatação conferida; mypy sem erros em 86 arquivos. Na página, 45 testes passaram, typecheck e build concluíram. A imagem Docker final foi construída e os serviços da aplicação foram atualizados.
+
+Commits locais desta continuação: `e4aaa1c` (CDC, tag v0.2), `bb230de` (exclusão, restauração e demo) e `34637ec` (captura dos testes, concorrência da interface e status). O commit de fechamento inclui CI, documentos e resultados; a tag v0.3 marca a entrega completa.
+
+A instância entregue está em `http://127.0.0.1:8000`, projeto Compose `quake-exposure-v03`, com os bancos, Kafka, Connect, CDC, worker e API. O coletor não foi iniciado. Ao fechar a verificação: zero transações CDC pendentes, zero cálculos pendentes/com lease/esgotados e zero quarentenas. Os volumes da v0.1 foram preservados; os projetos temporários de teste e medição são removidos ao terminar.
+
+Pendência externa: criar o repositório remoto e autorizar o push dos commits e tags. O CI está configurado; nenhuma execução no GitHub foi feita. Nenhuma requisição ao USGS nesta continuação. Nenhuma nova decisão de escopo.

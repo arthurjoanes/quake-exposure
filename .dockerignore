@@ -1,5 +1,7 @@
 .git
 .secrets
+.privacy
+backups
 .env
 .venv
 data
@@ -8,6 +10,6 @@ data
 .mypy_cache
 .ruff_cache
 .hypothesis
-.tmp-cdc-smoke
+.tmp-*
 web/node_modules
 web/dist
