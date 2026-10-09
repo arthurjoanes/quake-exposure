@@ -215,3 +215,24 @@ RAM por `docker stats`, durante a demo: plataforma 354,30 MiB; origem 58,30 MiB;
 O primeiro bootstrap excedeu 180 s com commit Kafka por mensagem. Após agrupar confirmações, o consumidor drenou cerca de 500 linhas a cada 3 s; a retomada verificou o seed completo e terminou sem semear novamente. A medição a frio fica no M6.
 
 A stack nova usa o projeto Compose `quake-exposure-v03`; os volumes da v0.1 foram preservados. Pendência externa: push depende do Arthur.
+
+## M5: exclusão, backfill e v0.3 (2026-10-09)
+
+Concluído.
+
+- `privacy/erasure.py` e `ledger.py`: BLOCKED, PURGED e CLOSED retomáveis; bloqueio da origem, ledger com fsync em volume separado, privacy_epoch e recibo com resíduos. O ledger contém apenas identificadores necessários à reaplicação.
+- CDC sanitiza payloads pendentes e reentregas de titulares bloqueados. A exclusão remove contato, intervalos, revisões, fatos e totais antigos, e invalida todos os jobs do tenant.
+- API mantém a leitura sob lock compartilhado do tenant; a exclusão usa lock exclusivo. Publicações de outra privacy_epoch respondem 409. O worker verifica a epoch e a geração antes de publicar.
+- `privacy/backup.py`: dumps PostgreSQL 18, manifesto SHA-256 e restauração em `qe_restore`. O ledger atual é reaplicado; o papel da API não tem CONNECT. A restauração da origem continua manual, com reaplicação das exclusões.
+- `qe demo` executa os cinco passos. A correção da carteira via CDC preserva as-of; exclusão seguida de CDC antigo não recria o ativo.
+- `status.py` distingue cálculos pendentes, com lease ativa e esgotados. A quinta tentativa em curso não aparece como falha. Na página, resposta ou 409 de uma seleção antiga não substitui a seleção atual.
+
+Gates F12 (backfill chegando durante o cálculo), F27 (segunda metade da janela falha), F18 (exclusão durante cálculo e CDC antigo) e F19 (dump anterior à exclusão, ledger posterior) passaram com os bancos reais. Os testes de exclusão também cobrem retomada após cada fase e falha de escrita no ledger.
+
+A suíte geral encontrou uma corrida no helper de captura dos testes: um END atrasado de outra transação podia encerrar a captura antes da operação pedida. O helper agora delimita a ação por XIDs reservados na origem. Uma regressão pausa o Connect, acumula uma transação antiga e exige as duas transações novas completas. Os oito testes de captura e exclusão passaram juntos em 61,84 s após a correção.
+
+Demo completa em `bb230de`: oito asserções passaram, incluindo soma dos fatos, API sem acesso ao stage e CDC antigo bloqueado. Resultado em [results/verify-demo.json](results/verify-demo.json). O backup e a restauração também foram executados pela CLI na stack de 10.000 ativos: titular ausente e acesso da API negado, em [results/restore-verification.json](results/restore-verification.json). O teste F19, separadamente, removeu da restauração linhas presentes no dump antigo.
+
+Página conferida no build atualizado: `us7000tiur`, REPLAY, Operadora B e SHAKEMAP_MMI; 1.972 elegíveis, 45 classificados, BRL 864.346,66 e USD 5.147.876,70. Sem erros no console. [Captura da página](results/ui-v0.3.png).
+
+Requisições ao USGS: zero. A coleta ao vivo ficou parada. O recibo informa retenção Kafka de sete dias e resíduos em WAL/dumps; não há limpeza automática de backups.

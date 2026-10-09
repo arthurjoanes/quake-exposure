@@ -22,6 +22,7 @@ import {
 import { near, planar } from "./basemap";
 import { formatMinor } from "./money";
 import { PublicationSync } from "./publication";
+import { LatestRefresh } from "./refresh";
 
 const REFRESH_MS = 10_000;
 
@@ -72,6 +73,7 @@ const state = {
   shown: null as CurrentPublication | null, // publicação cujos ativos, resumo e diff estão na tela
 };
 const sync = new PublicationSync();
+const refreshes = new LatestRefresh();
 let eventSignature = "";
 
 // ---------- mapa ----------
@@ -295,7 +297,7 @@ function paint(pub: CurrentPublication | null, view: View | null, message = ""):
   renderEventPanel();
 }
 
-async function refreshPublication(key: string): Promise<void> {
+async function refreshPublication(key: string, isCurrent: () => boolean): Promise<void> {
   const { scope, tenant, uid, mode } = selection();
   if (!uid || !tenant) {
     sync.reset();
@@ -308,7 +310,7 @@ async function refreshPublication(key: string): Promise<void> {
     mode,
     scope,
   });
-  if (key !== selectionKey()) return;
+  if (!isCurrent() || key !== selectionKey()) return;
   if (!pub) {
     sync.seen(null);
     paint(null, null, "Sem publicação para este evento, tenant e modo.");
@@ -320,7 +322,7 @@ async function refreshPublication(key: string): Promise<void> {
     get<AssetsResponse>(`/api/publications/${id}/assets`, { tenant }),
     get<DiffResponse>(`/api/publications/${id}/diff`, { tenant }),
   ]);
-  if (key !== selectionKey() || !assets || !diff) return;
+  if (!isCurrent() || key !== selectionKey() || !assets || !diff) return;
   const view = build(pub, assets, diff);
   if (sync.accept({ pub, assets, diff })) paint(pub, view);
 }
@@ -356,9 +358,10 @@ function renderStale(s: ApiStatus): void {
 // ---------- ciclo ----------
 
 async function refresh(): Promise<void> {
-  try {
+  await refreshes.run(async (isCurrent) => {
     if (!tenantSel.options.length) {
       const tenants = (await get<Tenant[]>("/api/tenants")) ?? [];
+      if (!isCurrent()) return;
       tenantSel.replaceChildren(...tenants.map((t) => new Option(`${t.name} (${t.tenant_id})`, t.tenant_id)));
     }
     const key = selectionKey();
@@ -367,8 +370,8 @@ async function refresh(): Promise<void> {
       get<ApiStatus>("/api/status"),
       get<QuakeEvent[]>("/api/events", { scope }),
     ]);
+    if (!isCurrent() || key !== selectionKey()) return;
     if (status) renderStale(status);
-    if (key !== selectionKey()) return;
     state.events = events ?? [];
     if (state.uid && !state.events.some((e) => e.earthquake_uid === state.uid)) {
       state.uid = ""; // saiu da lista (outro escopo ou fundido em outro evento)
@@ -378,24 +381,26 @@ async function refresh(): Promise<void> {
     renderEventOptions();
     drawEvents();
     if (state.uid) {
-      state.revisions =
+      const revisions =
         (await get<Revision[]>(`/api/events/${encodeURIComponent(state.uid)}/revisions`, { scope })) ?? [];
-      if (key !== selectionKey()) return;
+      if (!isCurrent() || key !== selectionKey()) return;
+      state.revisions = revisions;
     } else {
       state.revisions = [];
     }
     renderEventPanel();
-    await refreshPublication(key);
+    await refreshPublication(key, isCurrent);
+    if (!isCurrent() || key !== selectionKey()) return;
     clock.textContent = `atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     clock.classList.remove("error");
-  } catch (err) {
+  }, (err) => {
     if (err instanceof PrivacyRecalculation) {
       sync.reset();
       paint(null, null, err.message);
     }
     clock.textContent = `erro: ${err instanceof Error ? err.message : String(err)}`;
     clock.classList.add("error");
-  }
+  });
 }
 
 let timer = 0;

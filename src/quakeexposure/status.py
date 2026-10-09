@@ -1,8 +1,9 @@
-"""Estado da coleta para o `qe status` (e, depois, para o `/status` da API)."""
+"""Estado da coleta, CDC e cálculos para `qe status` e `/api/status`."""
 
 from datetime import datetime, timedelta
 from typing import Any
 
+from quakeexposure.exposure.worker import MAX_ATTEMPTS
 from quakeexposure.ingestion.collector import MAX_REQUEST_ATTEMPTS
 from quakeexposure.ingestion.store import Conn
 
@@ -66,8 +67,22 @@ def report(conn: Conn, now: datetime) -> dict[str, Any]:
         or task != "RUNNING"
         or slot is not True,
     }
+    jobs = conn.execute(
+        """SELECT
+               count(*) FILTER (WHERE attempts < %(max)s
+                   AND (lease_until IS NULL OR lease_until < %(now)s)),
+               count(*) FILTER (WHERE lease_until >= %(now)s),
+               count(*) FILTER (WHERE attempts >= %(max)s
+                   AND (lease_until IS NULL OR lease_until < %(now)s))
+           FROM control.exposure_job WHERE desired_generation > published_generation""",
+        {"max": MAX_ATTEMPTS, "now": now},
+    ).fetchone()
+    assert jobs is not None
     return {
         "cdc": cdc,
+        # Categorias disjuntas. A quinta tentativa em curso ainda tem lease ativa;
+        # só fica esgotada depois de falhar ou de a lease expirar.
+        "exposure_jobs": {"pending": jobs[0], "leased": jobs[1], "exhausted": jobs[2]},
         "sources": sources,
         "captures_pending": count(
             "SELECT count(*) FROM control.capture WHERE projected_at IS NULL"
@@ -119,6 +134,9 @@ def format_report(r: dict[str, Any]) -> str:
             line += f"; watermark {s['watermark']}; {s['last_new_revisions']} revisões novas"
         lines.append(line)
     lines += [
+        f"cálculos: {r['exposure_jobs']['pending']} pendentes; "
+        f"{r['exposure_jobs']['leased']} com lease ativa; "
+        f"{r['exposure_jobs']['exhausted']} esgotados",
         f"CDC: conector {r['cdc']['connector_state']}, tarefa {r['cdc']['task_state']}; "
         f"{r['cdc']['pending_transactions']} transações pendentes; "
         f"WAL retido {r['cdc']['retained_wal_bytes']} bytes"
