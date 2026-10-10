@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" role="img" aria-labelledby="label">
+  <title id="label">Vite</title>
+  <!-- Icon: https://raw.githubusercontent.com/devicons/devicon/7330accdbc47e2dc0c19789a48533c4a3c50fe58/icons/vite/vite-original.svg; Devicon MIT. Original colors and proportions preserved. -->
+  <rect x="0.5" y="0.5" width="71" height="71" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" x="18" y="8" width="36" height="36" preserveAspectRatio="xMidYMid meet"><path fill="#006bff" d="M128 3.83 48.72 22.547 36.977 124.17ZM39.464 24.264 0 33.167l35.658 90.604Z"/></svg>
+  <text x="36" y="61" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#1f2328">Vite</text>
+</svg>

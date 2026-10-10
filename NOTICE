@@ -22,3 +22,7 @@ world-atlas: https://github.com/topojson/world-atlas (ISC).
 
 Marca, logotipo e banner QuakeExposure: Arthur Joanes, 2026.
 Os arquivos SVG próprios acompanham a licença MIT deste repositório.
+
+Ícones de tecnologias e LinkedIn: Devicon, licença MIT.
+Fonte: https://github.com/devicons/devicon/tree/7330accdbc47e2dc0c19789a48533c4a3c50fe58
+Licença preservada em docs/stack/LICENSE.devicon; fontes em docs/stack/README.md.
