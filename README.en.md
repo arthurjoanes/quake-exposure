@@ -4,21 +4,36 @@
 
 # QuakeExposure
 
-Real USGS earthquakes, a fictional portfolio, and the path from each change to its published result. The dashboard combines a map, amounts by currency, intensity distribution, and asset lists. The backend handles event revisions, portfolio CDC, and erasure that survives redelivery of old data.
+Asset exposure triage using real USGS earthquakes and a fictional portfolio. I built the collector, geographic calculations, portfolio updates through CDC, and dashboard for inspecting classified assets and following revisions.
 
-[Português](README.md) · [Demo](#demo) · [Architecture](#architecture) · [Run locally](#run-locally) · [Verification](#verification) · [LinkedIn](https://www.linkedin.com/in/arthur-joanes-6a2967373/)
+<p>
+  <a href="#demo"><img src="docs/readme/badges/demo.en.svg" alt="Demo" width="139" height="28"></a>
+  <a href="#architecture"><img src="docs/readme/badges/architecture.en.svg" alt="Architecture" width="126" height="28"></a>
+  <a href="#run-locally"><img src="docs/readme/badges/run.en.svg" alt="Run locally" width="107" height="28"></a>
+  <a href="#verification"><img src="docs/readme/badges/verification.en.svg" alt="Verification" width="119" height="28"></a>
+  <a href="https://www.linkedin.com/in/arthur-joanes-6a2967373/"><img src="docs/readme/badges/linkedin.svg" alt="Arthur Joanes on LinkedIn" width="108" height="28"></a>
+</p>
+
+[Português](README.md)
 
 [![CI](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml/badge.svg)](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml)
 
 ## Overview
 
-The seed creates 10,000 assets across two portfolios, with BRL and USD values. Earthquakes and grids are real captures; test mutations belong to the FAULT scope. Each publication fixes the event, ShakeMap, portfolio version, and rule. Map, charts, and lists read that same publication.
+An earthquake revision or portfolio correction can change which assets enter the result. QuakeExposure calculates exposure using the portfolio version effective at the event time and known at the selected revision. Each publication fixes the event, ShakeMap, portfolio version, and rule; the map, charts, and lists read that same result.
 
-RADIUS_TRIAGE uses a distance of up to 100 km. SHAKEMAP_MMI samples the grid at each asset and classifies MMI ≥ 6.0. These are project triage rules, not earthquake predictions, alerts, damage estimates, or losses. USGS already provides ShakeMap and ShakeCast.
+The initial load creates 10,000 assets across two portfolios, with BRL and USD values. REPLAY uses real USGS captures; FAULT labels test mutations; LIVE follows live collection. The dashboard offers two criteria:
+
+| Criterion | Calculation | Reading the result |
+| --- | --- | --- |
+| 100 km radius | `ST_DWithin` on geography, measured from the epicenter | Assets near the event |
+| MMI intensity ≥ 6.0 | ShakeMap grid sampled at each asset location | Assets within the grid extent and above the threshold |
+
+The criteria select assets for inspection. Amounts represent the classified portfolio; they do not estimate damage, financial losses, or future earthquakes.
 
 ## Demo
 
-![QuakeExposure dashboard with its visual identity, map and currency totals](docs/results/ui-overview.png)
+![QuakeExposure dashboard with asset map and currency totals](docs/results/ui-overview.png)
 
 <details>
 <summary>View charts, asset lists and mobile layout</summary>
@@ -31,14 +46,24 @@ RADIUS_TRIAGE uses a distance of up to 100 km. SHAKEMAP_MMI samples the grid at 
 
 </details>
 
-Capture of the local application with REPLAY data and a fictional portfolio. Running the demo can change counts and erase one asset; the initial seed contains 10,000. The [demo recorded on October 9, 2026](docs/results/verify-demo.json) includes its commit, capture hashes, and eight assertions across five steps.
+Local captures from October 9, 2026, using REPLAY data and a fictional portfolio. The demo changes the portfolio and erases one asset; the Operadora B screenshot therefore shows 4,999 assets after an initial load of 5,000 in that portfolio.
 
-- OpenStreetMap streets and places, clusters at lower zoom levels, and a cache per publication. Events and assets use Canvas; panning does not rebuild every marker. The offline Natural Earth basemap includes countries and coastlines at 1:50 million scale.
-- Charts show portfolio composition, classified amounts by currency, MMI distribution, and entries/exits between publications. Missing maps are shown as unavailable. BRL and USD keep separate totals and percentages.
-- Asset, revision, and change lists are preserved. Assets support ID search, status and currency filters, 50- or 100-row pages, and an action to locate each asset on the map.
-- Scope, portfolio, event, and criterion are recorded in the URL. LIVE, REPLAY, and FAULT remain labelled on screen.
+In the [run recorded on October 9, 2026](docs/results/verify-demo.json), event `us7000tiur`, portfolio Operadora B, and criterion MMI ≥ 6.0 produced:
 
-Online tiles require internet access. The offline basemap is included in the build and can be selected on the map. Portfolio data continues to come from the local API. The application interface is in Brazilian Portuguese.
+| Result | Value |
+| --- | --- |
+| Eligible assets within the grid extent | 1,972 |
+| Assets classified by the intensity threshold | 45 |
+| Classified amount in BRL | BRL 864,346.66 |
+| Classified amount in USD | USD 5,147,876.70 |
+
+To inspect this scenario in the dashboard:
+
+1. Select REPLAY, Operadora B, `us7000tiur`, and the MMI criterion. Inspect portfolio composition, amounts by currency, and intensity distribution in the charts.
+2. Filter the asset list by classified status and currency. Search for an ID or locate an asset on the map. Pages contain 50 or 100 rows; list filters do not change chart totals.
+3. Inspect revisions and entries and exits between publications. Scope, portfolio, event, and criterion are stored in the URL.
+
+The map uses OpenStreetMap streets and places, with point clustering at lower zoom levels. The offline alternative includes Natural Earth countries and coastlines at 1:50 million scale. Online tiles require internet access; portfolio data comes from the local API. A missing ShakeMap appears as unavailable, without assigning zero intensity to assets. The application interface is in Brazilian Portuguese.
 
 ## Architecture
 
@@ -71,6 +96,16 @@ All [Compose](compose.yaml) services run on the same host. The API serves the pa
 
 ## Stack and decisions
 
+<p>
+  <img src="docs/stack/python.svg" alt="Python" width="64" height="64">
+  <img src="docs/stack/fastapi.svg" alt="FastAPI" width="64" height="64">
+  <img src="docs/stack/postgresql.svg" alt="PostgreSQL" width="64" height="64">
+  <img src="docs/stack/apachekafka.svg" alt="Apache Kafka" width="64" height="64">
+  <img src="docs/stack/typescript.svg" alt="TypeScript" width="64" height="64">
+  <img src="docs/stack/vite.svg" alt="Vite" width="64" height="64">
+  <img src="docs/stack/docker.svg" alt="Docker" width="64" height="64">
+</p>
+
 | Component | Role and tradeoff |
 | --- | --- |
 | Python 3.14, uv, FastAPI | Domain, collection, calculation, and API; separate processes share the codebase. |
@@ -93,44 +128,26 @@ docker compose run --rm --no-deps worker qe bootstrap
 docker compose up -d worker api
 ```
 
-Bootstrap waits for the replication slot, seeds the source through commands, waits for CDC, and imports captured USGS data as REPLAY. It makes no USGS requests. Completed bootstrap can be resumed; a partial seed requires manual reset. Keep older directly loaded portfolios in a separate Compose project.
-
-Open [127.0.0.1:8000](http://127.0.0.1:8000). The initial selection uses REPLAY and `us7000tiur`. The read-only API has no authentication; tenant is a filter. Only port 8000 is published, on loopback.
-
-The development instance created for this delivery uses `docker compose -p quake-exposure-v03`. The v0.1 volumes were preserved.
+Open [127.0.0.1:8000](http://127.0.0.1:8000). The initial selection uses REPLAY and event `us7000tiur`. Bootstrap waits for CDC, seeds the portfolio through the source, and imports versioned captures without calling USGS. Completed bootstrap can be resumed; a partial seed requires the [manual reset in the runbook](docs/operacao.md#slot-perdido-ou-offsets-expirados).
 
 ```bash
 docker compose exec worker qe demo
 docker compose exec worker qe status --json
-docker compose exec worker qe explain us7000tiur --tenant seguradora-a --mode SHAKEMAP_MMI --scope REPLAY
-docker compose exec worker qe portfolio correct --tenant seguradora-a --interval "seg-00001#1" --lon 120.5 --lat -8.2
-docker compose exec worker qe erase <subject_token>
-docker compose run --rm maintenance qe backup
-docker compose run --rm maintenance qe restore-verify /data/backups/<backup>
 ```
 
-The five-step demo replays real captures, applies a labelled FAULT revision and duplicate, corrects the portfolio through CDC with an as-of comparison, rejects an outdated calculation, and erases one subject before replaying old CDC. Each run changes the fictional portfolio and erases one asset.
+The demo covers five steps: real replay, a FAULT revision and duplicate, a portfolio correction through CDC, rejection of a stale calculation, and erasure followed by old CDC redelivery. Each run changes the fictional portfolio and erases one asset.
 
-Run `qe verify-demo --commit <git-rev-parse-HEAD> --output /data/backups/verify-demo.json` in the worker to record assertions. Copy the result into `docs/results/` with `docker compose cp worker:/data/backups/verify-demo.json docs/results/verify-demo.json`.
-
-Live collection is explicit:
-
-```bash
-docker compose up -d collector
-docker compose exec collector qe backfill --from 2026-10-01 --to 2026-10-07
-docker compose exec worker qe watch add us7000tiur
-```
-
-Grids from contributing networks other than `us` are excluded from Git. `uv run python scripts/fetch_fixtures.py pull` downloads them through the collection client and checks their hashes. They are optional for the main demo.
+The [operations guide](docs/operacao.md), in Portuguese, contains commands for live collection, portfolio corrections, erasure, backup, and restore. It also explains how to record the demo with its commit and assertions. Optional grids from networks other than `us` are downloaded separately with hash checks.
 
 ## Verification
 
-| Local record | Result and scope |
+| Record | Result and scope |
 | --- | --- |
 | [Five-step demo](docs/results/verify-demo.json) | Eight assertions on October 9, 2026, including duplicates, as-of CDC, stale-generation rejection, and redelivery after erasure. |
 | [Restore](docs/results/restore-verification.json) | Ledger reapplied, erased subject absent, and API-role access denied on the restored database. |
 | [Empty-volume bootstrap](docs/results/m6-bootstrap-cold.md) | 356.907 s to the four main publications, with cached images and concurrent load documented in the record. |
 | [Tests and checks](docs/progress.md) | M6 completion: 307 Python tests with no skips. Frontend update: 80 frontend tests, typecheck, and build. |
+| [CI on October 9, 2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Five jobs completed at commit `7564a7c`: Python, frontend, PostGIS, integration, and security. |
 
 To repeat the checks:
 
@@ -146,14 +163,16 @@ npm run typecheck
 npm run build
 ```
 
-Tests only use local networking. Integration tests start real databases, Kafka, and Debezium in disposable projects; they are skipped when Docker is unavailable. The [workflow](.github/workflows/ci.yaml) includes unit/property/contract tests, a PostGIS service job, full integration, frontend checks, gitleaks, pip-audit, and npm audit. Results above come from local runs; remote status is shown by the CI badge.
+Tests only use local networking. Integration tests start real databases, Kafka, and Debezium in disposable projects; they are skipped when Docker is unavailable. The [workflow](.github/workflows/ci.yaml) includes unit/property/contract tests, a PostGIS service job, full integration, frontend checks, gitleaks, pip-audit, and npm audit. Records above describe identified runs; the badge shows the current workflow status. Bootstrap timing is a local measurement with cached images, excluding downloads and builds.
 
-## Limitations
+<a id="limitations"></a>
+
+## Limits and security
 
 - Fictional portfolio; BRL and USD are never converted or combined. Money uses integers and JSON strings. Do not add the same portfolio across earthquakes.
 - Polling captures observed USGS revisions, not every intermediate revision.
 - LIVE calculates recent ShakeMap events from the last seven days and watchlisted events. REPLAY and FAULT remain separate and labelled.
-- No authentication or TLS between containers. Intended for local use on 127.0.0.1.
+- Read-only API without authentication; tenant is a filter. Only port 8000 is published, on 127.0.0.1. No TLS between containers.
 - Lost slots, expired offsets, and partial seeds require manual reset. No high availability.
 - Kafka messages may remain for seven days. WAL and dump residuals are listed in the erasure receipt. Restore reapplies the current ledger, stored outside database volumes.
 - Erasure invalidates the tenant's publications until recalculation. Old CDC cannot return blocked subjects to calculations.
@@ -166,9 +185,16 @@ Tests only use local networking. Integration tests start real databases, Kafka, 
 | Implementation decisions | [ADRs](docs/adr/) · [Repository rules](CONTRIBUTING.md) |
 | Runs and measurements | [Results](docs/results/) · [Milestone progress](docs/progress.md) |
 | Visual identity | [Symbol](web/public/brand/quake-exposure-mark.svg) · [Wordmark](web/public/brand/wordmark.svg) · [Banner](docs/assets/banner.svg) |
+| Presentation maintenance | [Documentation style](docs/padrao-documentacao.md) · [Icon sources and license](docs/stack/README.md) |
 
-## Author, data, and license
+<a id="author-data-and-license"></a>
 
-Arthur Joanes · [GitHub](https://github.com/arthurjoanes) · [LinkedIn](https://www.linkedin.com/in/arthur-joanes-6a2967373/).
+## Author and license
+
+<p><a href="https://www.linkedin.com/in/arthur-joanes-6a2967373/"><img src="docs/contact/linkedin.svg" alt="" width="24" height="24"> <strong>Arthur Joanes on LinkedIn</strong></a></p>
+
+[GitHub](https://github.com/arthurjoanes) · [Report an issue](https://github.com/arthurjoanes/quake-exposure/issues).
 
 Code and original brand assets under [MIT](LICENSE). U.S. Geological Survey public-domain data; ComCat DOI 10.5066/F7MS3QZH. Online map © OpenStreetMap contributors; offline Natural Earth basemap via world-atlas. Sources and credits in [NOTICE](NOTICE).
+
+Stack and LinkedIn icons: [Devicon, MIT license](docs/stack/LICENSE.devicon).

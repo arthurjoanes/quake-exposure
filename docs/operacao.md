@@ -149,6 +149,28 @@ O recibo registra os resíduos em tópicos, WAL e dumps. A retenção dos tópic
 é de sete dias. Apagar backups antigos é uma operação manual do operador;
 o projeto não aplica uma política automática de expiração de dumps.
 
+## Registrar a demo
+
+Com o worker ativo, pare o coletor durante a verificação. Substitua `<sha-40>`
+pelo resultado de `git rev-parse HEAD`. A execução altera a carteira fictícia e
+exclui um ativo, como `qe demo`.
+
+```bash
+docker compose stop collector
+docker compose exec worker qe verify-demo --commit <sha-40> --output /data/backups/verify-demo.json
+docker compose cp worker:/data/backups/verify-demo.json docs/results/verify-demo.json
+```
+
+O JSON registra commit, seed, hashes das capturas e asserções dos cinco passos.
+Preserve os registros anteriores antes de copiar uma nova execução para o Git.
+
+Grids opcionais de redes diferentes de `us` não são distribuídos no repositório.
+O comando abaixo baixa esses arquivos pelo cliente de coleta e confere seus hashes:
+
+```bash
+uv run python scripts/fetch_fixtures.py pull
+```
+
 ## Testes e verificações
 
 ```bash
@@ -174,8 +196,8 @@ contratos, frontend, integrações, pip-audit e gitleaks. O job `postgis` recebe
 o PostgreSQL como service, inicializa os papéis por psycopg e testa a plataforma
 sem chamar o Docker. `integration` sobe a stack pelo Compose e também testa
 origem, Debezium, exclusão e restauração. As ações usam SHAs,
-as imagens e ferramentas de auditoria têm versões fixadas. A execução no
-GitHub começa depois que o repositório for publicado.
+as imagens e ferramentas de auditoria têm versões fixadas. As execuções remotas
+ficam no [GitHub Actions](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml).
 
 `.gitleaksignore` contém uma única impressão histórica: o UUID fixo de titular
 do builder de teste, identificado como `generic-api-key`. Não exclui arquivos,

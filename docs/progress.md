@@ -272,3 +272,13 @@ A base online faz requisições de tiles ao OpenStreetMap; os dados da carteira 
 Conferência no navegador: modos RADIUS e MMI, totais por moeda, busca por ID, paginação, filtros combinados, localização de ativo no mapa e alternância online/offline. No modo MMI, a Operadora B tem 4.999 ativos, 1.972 elegíveis e 45 classificados; o filtro de classificados em USD retorna 38. A lista desenha 50 linhas por padrão. Layout a 390 pixels sem rolagem horizontal da página; a tabela tem rolagem própria. Ajustado o redimensionamento do mapa para preservar o centro. Sem erros ou avisos no console. [Painel](results/ui-overview.png), [gráficos](results/ui-map-charts.png), [listas](results/ui-assets.png) e [celular](results/ui-mobile-charts.png).
 
 Imagem Docker reconstruída e API atualizada em `quake-exposure-v03`; volumes e outros projetos preservados. A referência do setup-uv no CI usa o commit da versão 7.6.0, em vez do objeto de tag anotada. O resultado remoto é consultado no [workflow do repositório](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml); os números de testes acima descrevem as execuções locais.
+
+## Padrão visual e editorial do README (2026-10-09)
+
+Comparados os READMEs de ContainerOps, API Sentinel, EvidenceDesk, Gestão de Recebíveis, Loja Assistente, Varejo Data Pipeline e CycleOps. A revisão aplica a navegação por badges locais, ícones da stack em 64 px e contato com ícone do LinkedIn, preservando a marca própria.
+
+Reescrita a abertura para apresentar finalidade e implementação. A demonstração inclui o caso da Operadora B, com 1.972 elegíveis, 45 classificados e valores separados por moeda, ligados à execução já registrada em `results/verify-demo.json`. O percurso explica gráficos, filtros, listas e revisões. Comandos de manutenção e registro da demo ficam no runbook. Português e inglês mantêm os mesmos números e referências.
+
+O padrão para futuras edições está em [padrao-documentacao.md](padrao-documentacao.md); fontes dos ícones e licença em [stack/README.md](stack/README.md). Conferidos 128 links e âncoras locais dos documentos revisados, 17 SVGs e `git diff --check`. Registros históricos e código da aplicação permanecem sem alterações; as suítes da aplicação não foram repetidas nesta revisão documental.
+
+CI remoto da implementação anterior confirmado: [execução 38004551496](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496), commit `7564a7c`, cinco jobs concluídos com sucesso em 09/10/2026. O README identifica essa execução separadamente do badge de estado atual.
