@@ -33,18 +33,31 @@ Os critérios selecionam ativos para consulta. Os valores representam a carteira
 
 ## Demonstração
 
-![Painel QuakeExposure com seleção geográfica e resumo por moeda](docs/results/ui-exploration.png)
+![Painel QuakeExposure com mapa, filtros e resumo por moeda](docs/results/ui-ux-desktop.jpg)
 
-A [demonstração online](https://arthurjoanes.github.io/quake-exposure/) abre no navegador, com capturas REPLAY e 10.000 ativos fictícios. Use Selecionar área para delimitar um polígono; a lista passa a mostrar seus ativos e os valores aparecem por moeda. Comparar no mapa mostra as posições anteriores e atuais, com os resumos das duas publicações.
+A [demonstração online](https://arthurjoanes.github.io/quake-exposure/) abre no navegador, com capturas REPLAY e 10.000 ativos fictícios. Mapa, Gráficos, Ativos e Operação têm acesso direto pela navegação. No celular, os filtros ficam recolhidos. A ação Área delimita um polígono; a lista passa a mostrar seus ativos e os valores aparecem por moeda.
+
+Comparar mostra posições anteriores e atuais, resumos e variação por moeda. A comparação considera a carteira inteira; o resultado da área permanece identificado à parte. Ver no mapa enquadra os ativos alterados. Critérios, revisões e operação ficam em controles expansíveis.
 
 No exemplo inicial, a correção retroativa de `ope-00001` muda sua posição para um ponto com MMI 6,7. A classificação passa de 45 para 46 ativos, e o valor em USD aumenta de US$ 5.147.876,70 para US$ 5.164.008,33. O ativo vale US$ 16.131,63; o total em BRL permanece R$ 864.346,66. O grid é uma captura original; a correção pertence à carteira fictícia.
 
 O snapshot de 11/10/2026, 23:42 em São Paulo, foi calculado pelo domínio a partir das capturas versionadas. A página pública oferece MMI e identifica que o CDC não foi executado nesse exemplo. O ambiente local também oferece raio de 100 km e o estado real do processamento. [Dados e origem](web/public/demo/snapshot.json) · [Guia de exploração](docs/exploracao.md).
 
 <details>
-<summary>Ver comparação, operação e capturas anteriores</summary>
+<summary>Ver comparação e interface no celular</summary>
 
-![Comparação de posições, classificação e valores entre publicações](docs/results/ui-comparison.png)
+![Comparação de posições e valores anteriores, atuais e sua variação por moeda](docs/results/ui-ux-comparison.jpg)
+
+[Interface no celular](docs/results/ui-ux-mobile.jpg)
+
+</details>
+
+Capturas da interface em 12/10/2026, com o snapshot descrito acima.
+
+<details>
+<summary>Ver operação e capturas anteriores</summary>
+
+[Seleção por área na apresentação anterior](docs/results/ui-exploration.png) · [Comparação anterior](docs/results/ui-comparison.png)
 
 ![Fluxo da carteira, CDC, cálculo e resultado](docs/results/ui-operations.png)
 
@@ -58,7 +71,7 @@ O snapshot de 11/10/2026, 23:42 em São Paulo, foi calculado pelo domínio a par
 
 </details>
 
-As capturas de gráficos, listas e celular acima são de 09/10/2026. Naquela execução local, a demo excluiu um ativo; a Operadora B ficou com 4.999, após uma carga inicial de 5.000 nessa carteira. O snapshot online usa uma carga própria e uma correção da carteira, sem executar exclusão.
+As capturas `ui-map-charts.png`, `ui-assets.png` e `ui-mobile-charts.png` são de 09/10/2026. Naquela execução local, a demo excluiu um ativo; a Operadora B ficou com 4.999, após uma carga inicial de 5.000 nessa carteira. O snapshot online usa uma carga própria e uma correção da carteira, sem executar exclusão.
 
 Na [execução registrada em 09/10/2026](docs/results/verify-demo.json), o evento `us7000tiur`, na Operadora B e no critério MMI ≥ 6,0, produziu:
 
@@ -73,9 +86,11 @@ Para explorar o painel:
 
 1. Selecione REPLAY, Operadora B, `us7000tiur` e o critério MMI. Confira a composição da carteira, os valores por moeda e a distribuição de intensidade nos gráficos.
 2. Na lista de ativos, filtre os classificados e uma moeda. Busque um ID ou use a ação de localizar no mapa. A lista tem páginas de 50 ou 100 linhas; seus filtros não alteram os totais dos gráficos.
-3. Delimite uma área no mapa. Arraste os vértices para ajustá-la ou use Limpar área para voltar à carteira inteira. O resultado da área fica separado do resumo geral.
-4. Use Comparar no mapa para consultar a publicação anterior, posições e mudanças de classificação. As alterações têm paginação.
-5. Abra Operação para acompanhar carteira, CDC, fila e publicações. Na demonstração pública, essa seção explica o cálculo do snapshot. A seleção de escopo, carteira, evento e critério fica na URL.
+3. Use Área para delimitar um polígono no mapa. Arraste os vértices para ajustá-lo ou use Limpar para voltar à carteira inteira. O resultado da área fica separado do resumo geral.
+4. Use Comparar para consultar a publicação anterior, posições e mudanças de classificação da carteira inteira. As alterações têm paginação; Ver no mapa enquadra os ativos da página.
+5. Abra Operação pela navegação para acompanhar carteira, CDC, fila e publicações. Na demonstração pública, essa seção explica o cálculo do snapshot.
+
+A URL guarda a seleção da análise, busca, situação, moeda e paginação da lista. Recarregar o endereço recupera esses filtros e reabre a comparação quando estava aberta. A área desenhada não é guardada. Falhas de consulta oferecem Tentar novamente; a comparação pode ser fechada durante o carregamento.
 
 O mapa usa ruas e localidades do OpenStreetMap, com agrupamento de pontos ao afastar o zoom. A alternativa offline inclui países e costa Natural Earth em 1:50 milhões. Os tiles online precisam de internet; a carteira vem da API local. Ausência de ShakeMap aparece como indisponibilidade, sem atribuir intensidade zero aos ativos.
 
@@ -166,6 +181,7 @@ Para gerar a demonstração estática a partir das capturas, consulte [Exportar 
 | [CI de 09/10/2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Cinco jobs concluídos no commit `7564a7c`: Python, frontend, PostGIS, integração e segurança. |
 | [Snapshot REPLAY](web/public/demo/snapshot.json) | Origem, seed, hashes e cenário da página pública. [Regressões do exportador](tests/unit/test_public_demo.py) conferem os valores do exemplo. |
 | [CI da exploração](https://github.com/arthurjoanes/quake-exposure/actions/runs/38197953583) | Commit `cb359c2`: Python, frontend, PostGIS, integração e segurança aprovados. 259 testes locais de unidade/propriedade e 110 da interface; testes da stack executados no CI. |
+| [Revisão de UI/UX](docs/progress.md) | 129 testes de frontend executados localmente em 12/10/2026, incluindo estado da navegação, comparação, operação e filtros da lista. |
 
 Para repetir as verificações:
 

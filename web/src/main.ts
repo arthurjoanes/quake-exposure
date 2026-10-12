@@ -28,6 +28,7 @@ import { renderOperations, type OperationsResponse } from "./operations";
 import { filterAssetsInPolygon, type AreaPolygon } from "./spatial";
 import type { RegionResponse } from "./map-region";
 import type { DemoMetadata } from "./demo-api";
+import { readListState, writeListState, readComparison, writeComparison } from "./navigation-state";
 
 const REFRESH_MS = 10_000;
 
@@ -80,6 +81,10 @@ const compareButton = el<HTMLButtonElement>("compare-map");
 const areaSummary = el("area-summary");
 const comparisonBox = el("comparison");
 const operationsBox = el("operations");
+const feedbackBox = el("app-feedback");
+const filtersPanel = el<HTMLDetailsElement>("analysis-filters");
+const retryAnalysis = el<HTMLButtonElement>("retry-analysis");
+const retryRegion = el<HTMLButtonElement>("retry-region");
 const DEMO = import.meta.env.VITE_DEMO === "1";
 let demoSnapshotAt = "";
 let demoPipelineExecuted = true;
@@ -103,14 +108,21 @@ let initialSelection = true;
 let regionGeneration = 0;
 let regionTimer = 0;
 let comparisonGeneration = 0;
+let comparisonOffset = 0;
+let areaDrawing = false;
+let restoreInitialList = true;
+let restoreInitialComparison = readComparison(initialParams);
+let operationsGeneration = 0;
 
 // ---------- mapa ----------
 
 const map = new QuakeMap("map", {
   onSelect: selectEvent,
-  onBaseStatus: (message) => { el("map-base-status").textContent = message; },
+  onBaseStatus: (message) => { el("map-base-status").textContent = message.startsWith("OpenStreetMap") ? "" : message; },
   onAreaChange: (polygon) => { state.area = polygon; applyArea(); },
   onAreaStatus: ({ drawing, vertices, message }) => {
+    areaDrawing = drawing;
+    document.querySelector<HTMLElement>(".area-controls")?.setAttribute("data-drawing", String(drawing));
     finishAreaButton.hidden = !drawing;
     finishAreaButton.disabled = vertices < 3;
     undoAreaButton.hidden = !drawing;
@@ -119,30 +131,41 @@ const map = new QuakeMap("map", {
     clearAreaButton.hidden = drawing || !state.area;
     drawAreaButton.disabled = drawing || state.shown?.result.status !== "COMPLETE";
     el("area-status").textContent = message;
+    el("area-status").hidden = !drawing;
   },
   onViewportChange: () => scheduleRegion(),
   onDensityChange: ({ assets, groups, clustered }) => {
-    fitButton.disabled = state.assets.length === 0;
+    fitButton.disabled = visibleAssets().length === 0;
     el("map-density").textContent = assets === 0
-      ? state.shown ? "Nenhum ativo neste enquadramento." : "Selecione um terremoto para analisar a carteira."
+      ? state.shown ? !state.area && state.assets.length ? "Carregando ativos…" : "Nenhum ativo neste enquadramento." : "Escolha um terremoto"
       : clustered
-        ? `${assets.toLocaleString("pt-BR")} ativos em ${groups.toLocaleString("pt-BR")} pontos e grupos. Amplie para separar.`
-        : `${assets.toLocaleString("pt-BR")} ativos. Selecione um ponto para ver os detalhes.`;
+        ? `${assets.toLocaleString("pt-BR")} ativos · ${groups.toLocaleString("pt-BR")} pontos e grupos`
+        : `${assets.toLocaleString("pt-BR")} ativos neste enquadramento`;
+    el("map-density").title = "Ativos no enquadramento atual. Amplie para separar os grupos.";
   },
 });
+
+function visibleAssets(): Asset[] {
+  return state.area ? filterAssetsInPolygon(state.assets, state.area) : state.assets;
+}
 const assetList = new AssetList(assetsBox, (asset) => {
   map.focusAsset(asset);
   el("map-wrap").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
-});
+}, () => rememberSelection());
 
 function applyArea(): void {
   if (!state.shown) return;
-  const assets = state.area ? filterAssetsInPolygon(state.assets, state.area) : state.assets;
+  const assets = visibleAssets();
+  assetList.setContext(state.area ? "Área selecionada" : "Carteira inteira");
   assetList.setAssets(assets);
-  clearAreaButton.hidden = !state.area;
+  setActionLabel(fitButton, state.area ? "Área" : "Carteira", state.area ? "Ver área no mapa" : "Ver carteira no mapa");
+  fitButton.disabled = assets.length === 0;
+  setActionLabel(drawAreaButton, state.area ? "Nova área" : "Área", state.area ? "Redesenhar área" : "Selecionar área");
+  clearAreaButton.hidden = areaDrawing || !state.area;
   areaSummary.hidden = !state.area;
   if (state.area) {
-    areaSummary.innerHTML = renderArea(assets);
+    retryRegion.hidden = true;
+    areaSummary.innerHTML = `${renderArea(assets)}<a href="#assets">Ver ativos desta área</a>`;
     const event = state.events.find(item => item.earthquake_uid === state.uid);
     map.setAssets(assets, `${state.shown.publication_id}|${JSON.stringify(state.area)}`, state.shown.result.input_vector.mode, event);
   } else {
@@ -169,48 +192,80 @@ async function loadRegion(): Promise<void> {
       tenant, ...Object.fromEntries(Object.entries(viewport).map(([key, value]) => [key, String(value)])), limit: "1200",
     });
     if (generation !== regionGeneration || tenant !== tenantSel.value || state.area || state.shown?.publication_id !== publication.publication_id) return;
-    if (!region || region.publication_id !== publication.publication_id) return;
+    if (!region || region.publication_id !== publication.publication_id) throw new Error("Região indisponível.");
     map.setRegion(region, publication.publication_id, publication.result.input_vector.mode, state.events.find(item => item.earthquake_uid === state.uid));
+    retryRegion.hidden = true;
   } catch (error) {
     if (generation !== regionGeneration || tenant !== tenantSel.value || state.shown?.publication_id !== publication.publication_id) return;
     if (error instanceof PrivacyRecalculation) { sync.reset(); paint(null, null, error.message); }
-    else el("map-density").textContent = "Não foi possível consultar os ativos desta região. Mova o mapa para tentar novamente.";
+    else if (!state.area) {
+      el("map-density").textContent = "Não foi possível consultar os ativos deste enquadramento.";
+      retryRegion.hidden = false;
+    }
   }
 }
 
-async function loadComparison(offset = 0): Promise<void> {
+async function loadComparison(offset = 0, reveal = true): Promise<void> {
   const publication = state.shown;
   if (!publication) return;
   const tenant = tenantSel.value;
   const generation = ++comparisonGeneration;
-  compareButton.disabled = true;
+  comparisonOffset = offset;
+  compareButton.setAttribute("aria-pressed", "true");
   comparisonBox.hidden = false;
-  comparisonBox.innerHTML = "<h2>Comparação entre publicações</h2><p>Consultando as mudanças.</p>";
+  comparisonBox.setAttribute("aria-busy", "true");
+  const heading = `<div class="section-heading"><div><h2>Comparação</h2><span class="section-scope">Carteira inteira</span></div><button class="icon-button" type="button" data-close-comparison title="Fechar comparação" aria-label="Fechar comparação"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>`;
+  comparisonBox.innerHTML = `${heading}<p class="muted" role="status">Consultando as mudanças…</p>`;
+  if (reveal) revealPanel(comparisonBox);
+  rememberSelection();
   try {
     const data = await get<ComparisonResponse>(`/api/publications/${encodeURIComponent(publication.publication_id)}/comparison`, { tenant, offset: String(offset), limit: "100" });
     if (generation !== comparisonGeneration || tenant !== tenantSel.value || state.shown?.publication_id !== publication.publication_id) return;
     if (!data || data.publication_id !== publication.publication_id) throw new Error("Comparação indisponível.");
     state.comparison = data;
-    comparisonBox.innerHTML = `<div class="section-heading"><h2>Comparação entre publicações</h2><button type="button" data-close-comparison>Fechar comparação</button></div>${renderComparison(data)}`;
-    map.setComparison(data.changes);
-    if (data.changes.length && offset === 0) map.fitComparison();
-    compareButton.setAttribute("aria-pressed", "true");
+    comparisonBox.innerHTML = `${heading}${renderComparison(data)}`;
+    map.setComparison(data.previous_available && data.before ? data.changes : []);
+    if (reveal) comparisonBox.focus({ preventScroll: true });
+    el("analysis-announcement").textContent = data.previous_available ? `${data.total_changes.toLocaleString("pt-BR")} ativos alterados entre as publicações.` : "Publicação anterior indisponível para comparação.";
   } catch (error) {
     if (generation !== comparisonGeneration || state.shown?.publication_id !== publication.publication_id) return;
     if (error instanceof PrivacyRecalculation) { sync.reset(); paint(null, null, error.message); }
-    else { map.clearComparison(); comparisonBox.innerHTML = `<h2>Comparação entre publicações</h2><p>${esc(error instanceof Error ? error.message : "Falha ao consultar as mudanças.")}</p>`; }
+    else {
+      state.comparison = null;
+      map.clearComparison();
+      comparisonBox.innerHTML = `${heading}<p role="status">Não foi possível consultar as mudanças entre publicações.</p><button type="button" data-retry-comparison>Tentar novamente</button>`;
+    }
   } finally {
-    if (generation === comparisonGeneration) compareButton.disabled = !state.shown;
+    if (generation === comparisonGeneration) {
+      comparisonBox.setAttribute("aria-busy", "false");
+      compareButton.disabled = !state.shown;
+    }
   }
 }
 
-function closeComparison(): void {
+function closeComparison(returnFocus = false): void {
   comparisonGeneration++;
   state.comparison = null;
   comparisonBox.hidden = true;
   comparisonBox.innerHTML = "";
+  comparisonBox.setAttribute("aria-busy", "false");
   compareButton.setAttribute("aria-pressed", "false");
   map.clearComparison();
+  if (returnFocus) {
+    compareButton.focus({ preventScroll: true });
+    revealPanel(el("map-wrap"), false);
+  }
+}
+
+function revealPanel(panel: HTMLElement, focus = true): void {
+  panel.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+  if (focus) panel.focus({ preventScroll: true });
+}
+
+function setActionLabel(button: HTMLButtonElement, label: string, description: string): void {
+  button.querySelector("[data-label]")!.textContent = label;
+  button.setAttribute("aria-label", description);
+  button.title = description;
 }
 
 // ---------- formatação ----------
@@ -237,9 +292,16 @@ const selection = () => ({
 const selectionKey = (): string => Object.values(selection()).join("|");
 function rememberSelection(): void {
   const s = selection();
-  const params = new URLSearchParams({ scope: s.scope, tenant: s.tenant, mode: s.mode });
+  const params = new URLSearchParams(location.search);
+  params.set("scope", s.scope);
+  params.set("tenant", s.tenant);
+  params.set("mode", s.mode);
   if (s.uid) params.set("event", s.uid);
-  history.replaceState(null, "", `${location.pathname}?${params}`);
+  else params.delete("event");
+  writeListState(params, assetList.getState());
+  writeComparison(params, !comparisonBox.hidden);
+  history.replaceState(null, "", `${location.pathname}?${params}${location.hash}`);
+  el("filter-selection").textContent = `${tenantSel.selectedOptions[0]?.textContent ?? "Escolher carteira"} · ${modeSel.value === "SHAKEMAP_MMI" ? "MMI ≥ 6,0" : "100 km"}`;
 }
 
 // ---------- eventos ----------
@@ -277,7 +339,8 @@ function renderEventPanel(): void {
     )
     .join("");
   eventPanel.innerHTML = `
-    <h2>Evento ${scopeBadge(e.stream_scope)}</h2>
+    <h2>Terremoto</h2><p class="event-link"><a href="https://earthquake.usgs.gov/earthquakes/eventpage/${encodeURIComponent(e.preferred_id)}" target="_blank" rel="noopener noreferrer" title="Consultar o evento no USGS">${esc(e.preferred_id)} ↗</a><span>M ${num(e.mag, 1)} · ${e.depth_km === null ? "–" : `${num(e.depth_km, 1)} km`}</span></p>
+    <details class="event-details"><summary>Revisões e detalhes ${scopeBadge(e.stream_scope)}</summary>
     <dl>
       <dt>ID USGS</dt><dd>${esc(e.preferred_id)}</dd>
       <dt>Horário</dt><dd>${esc(utc(e.event_time))}</dd>
@@ -291,7 +354,7 @@ function renderEventPanel(): void {
     <div class="scroll short"><table>
       <thead><tr><th>Atualizada em</th><th>ID</th><th>M</th><th>Status</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`;
+    </table></div></details>`;
 }
 
 const scopeBadge = (s: Scope): string => (s === "LIVE" ? "" : `<span class="badge ${s}">${s}</span>`);
@@ -311,12 +374,12 @@ function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffRespon
   const event = state.events.find((e) => e.earthquake_uid === r.input_vector.earthquake_uid);
   const totals = r.qualifying_value_minor;
   const summary = `
-    <div class="summary-heading"><h2>Exposição ${scopeBadge(r.input_vector.stream_scope)}</h2><span class="result-status">${STATUS_TEXT[r.status]}</span></div>
+    <div class="summary-heading"><h2>Carteira inteira</h2><span class="result-status" data-result-status="${r.status}">${STATUS_TEXT[r.status]}</span></div>
     <p class="summary-event"><strong>${esc(event?.preferred_id ?? "Terremoto")}</strong>${esc(event ? utc(event.event_time) : "")}</p>
     <dl class="summary-counts"><div class="classified"><dt>Classificados</dt><dd>${count(r.qualifying_count)}</dd></div><div><dt>Elegíveis</dt><dd>${count(r.eligible_count)}</dd></div></dl>
-    <dl class="currency-values"><div><dt>Valor classificado em BRL</dt><dd>${totals ? formatMinor(totals.BRL ?? "0", "BRL") : "–"}</dd></div><div><dt>Valor classificado em USD</dt><dd>${totals ? formatMinor(totals.USD ?? "0", "USD") : "–"}</dd></div></dl>
-    <p class="muted">${MODE_NOTE[r.input_vector.mode]}</p>
-    <details class="publication-details"><summary>Detalhes da publicação</summary><dl>
+    <dl class="currency-values"><div><dt>Classificados · BRL</dt><dd>${totals ? formatMinor(totals.BRL ?? "0", "BRL") : "–"}</dd></div><div><dt>Classificados · USD</dt><dd>${totals ? formatMinor(totals.USD ?? "0", "USD") : "–"}</dd></div></dl>
+    <span class="criterion-tag">${r.input_vector.mode === "SHAKEMAP_MMI" ? "MMI ≥ 6,0" : "Raio de 100 km"}</span>
+    <details class="publication-details"><summary>Critério e publicação</summary><p>${MODE_NOTE[r.input_vector.mode]}</p><dl>
       <dt>Status</dt><dd>${r.status}</dd>
       <dt>Mapa usado</dt><dd>${r.input_vector.product_revision_id === "NONE" ? "nenhum (raio)" : `<code>${esc(r.input_vector.product_revision_id)}</code>`}</dd>
       <dt>Geração</dt><dd>${pub.generation}</dd>
@@ -338,13 +401,13 @@ function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffRespon
     return `<h3>${title} (${items.length})</h3>${rows ? `<div class="scroll short"><table><tbody>${rows}</tbody></table></div>` : ""}${more}`;
   };
   const diffHtml = `
-    <h2>Antes e depois</h2>
-    <dl>
+    <h2>Entradas e saídas</h2>
+    <details class="diff-details"><summary>Motivo da mudança</summary><dl>
       <dt>Anterior</dt><dd>${diff.previous_publication_id ? shortId(diff.previous_publication_id) : "nenhuma"}</dd>
-      <dt>Mudou por</dt><dd>${esc(diff.causes.join(", ") || "nada no vetor de entrada")}</dd>
-    </dl>
+      <dt>Mudou por</dt><dd>${esc(diff.causes.map(cause => cause === "epoch da carteira" ? "versão da carteira" : cause).join(", ") || "nenhuma alteração")}</dd>
+    </dl></details>
     ${diffList("Entraram", diff.entered)}
-    ${diffList("Saíram", diff.left)}`;
+    ${diffList("Saíram", diff.left)}<button type="button" data-open-comparison>Ver comparação completa</button>`;
 
   return { summary, diff: diffHtml, assets: assets.assets, charts: renderCharts(pub, assets, diff) };
 }
@@ -359,9 +422,19 @@ function paint(pub: CurrentPublication | null, view: View | null, message = ""):
     summaryBox.innerHTML = view.summary;
     diffBox.innerHTML = view.diff;
     chartsBox.innerHTML = view.charts;
-    drawAreaButton.disabled = pub?.result.status !== "COMPLETE";
+    drawAreaButton.disabled = areaDrawing || pub?.result.status !== "COMPLETE";
     compareButton.disabled = false;
     applyArea();
+    if (restoreInitialList) {
+      restoreInitialList = false;
+      assetList.restoreState(readListState(initialParams));
+    }
+    rememberSelection();
+    el("analysis-announcement").textContent = `Carteira carregada. ${count(pub?.result.qualifying_count ?? null)} ativos classificados.`;
+    if (restoreInitialComparison) {
+      restoreInitialComparison = false;
+      void loadComparison(0, false);
+    }
   } else {
     regionGeneration++;
     clearTimeout(regionTimer);
@@ -371,13 +444,17 @@ function paint(pub: CurrentPublication | null, view: View | null, message = ""):
     map.clearAreaSelection();
     map.clearAssets();
     assetList.clear();
-    summaryBox.innerHTML = `<h2>Exposição</h2><p class="muted">${esc(message)}</p><p class="muted">${MODE_NOTE[modeSel.value as Mode]}</p>`;
+    summaryBox.innerHTML = `<h2>Carteira inteira</h2><p class="muted">${esc(message)}</p>`;
     diffBox.innerHTML = "";
     chartsBox.innerHTML = `<div class="chart-empty"><p>${esc(message)} Os gráficos acompanham a publicação selecionada.</p></div>`;
     drawAreaButton.disabled = true;
     compareButton.disabled = true;
     areaSummary.hidden = true;
+    areaSummary.innerHTML = "";
     clearAreaButton.hidden = true;
+    retryRegion.hidden = true;
+    setActionLabel(fitButton, "Carteira", "Ver carteira no mapa");
+    setActionLabel(drawAreaButton, "Área", "Selecionar área");
   }
   renderEventPanel();
 }
@@ -442,25 +519,59 @@ function renderStale(s: ApiStatus): void {
 
 // ---------- ciclo ----------
 
+function feedback(message = "", error = false): void {
+  feedbackBox.hidden = !message;
+  feedbackBox.dataset.state = error ? "error" : "loading";
+  el("feedback-message").textContent = message;
+  retryAnalysis.hidden = !error;
+  document.querySelector(".analysis-view")?.setAttribute("aria-busy", String(Boolean(message) && !error));
+}
+
+async function refreshOperations(isCurrent: () => boolean): Promise<void> {
+  const tenant = tenantSel.value;
+  if (!tenant) return;
+  const generation = ++operationsGeneration;
+  operationsBox.setAttribute("aria-busy", "true");
+  try {
+    const operations = await get<OperationsResponse>("/api/operations", { tenant });
+    if (!isCurrent() || generation !== operationsGeneration || tenant !== tenantSel.value) return;
+    operationsBox.innerHTML = operations ? renderOperations(operations, DEMO, demoPipelineExecuted) : "<h2>Operação da carteira</h2><p>Sem informações de processamento para esta carteira.</p>";
+  } catch {
+    if (!isCurrent() || generation !== operationsGeneration || tenant !== tenantSel.value) return;
+    operationsBox.innerHTML = '<h2>Operação da carteira</h2><p role="status">Não foi possível consultar o processamento.</p><button type="button" data-retry-operations>Tentar novamente</button>';
+  } finally {
+    if (isCurrent() && generation === operationsGeneration) operationsBox.setAttribute("aria-busy", "false");
+  }
+}
+
+async function refreshSources(isCurrent: () => boolean): Promise<void> {
+  if (DEMO) return;
+  try {
+    const status = await get<ApiStatus>("/api/status");
+    if (isCurrent() && status) renderStale(status);
+  } catch {
+    if (!isCurrent()) return;
+    staleBox.hidden = false;
+    staleBox.textContent = "O estado das fontes não pôde ser consultado. A publicação mantém seu horário original.";
+  }
+}
+
 async function refresh(): Promise<void> {
   await refreshes.run(async (isCurrent) => {
+    if (!state.shown) feedback("Carregando a análise…");
     if (!tenantSel.options.length) {
       const tenants = (await get<Tenant[]>("/api/tenants")) ?? [];
       if (!isCurrent()) return;
-      tenantSel.replaceChildren(...tenants.map((t) => new Option(`${t.name} (${t.tenant_id})`, t.tenant_id)));
+      tenantSel.replaceChildren(...tenants.map((t) => new Option(t.name, t.tenant_id)));
       const preferred = initialParams.get("tenant");
       if (preferred && tenants.some((tenant) => tenant.tenant_id === preferred)) tenantSel.value = preferred;
     }
     let key = selectionKey();
     const { scope } = selection();
-    const [status, events, operations] = await Promise.all([
-      get<ApiStatus>("/api/status"),
-      get<QuakeEvent[]>("/api/events", { scope }),
-      tenantSel.value ? get<OperationsResponse>("/api/operations", { tenant: tenantSel.value }) : Promise.resolve(null),
-    ]);
+    void refreshSources(isCurrent);
+    void refreshOperations(isCurrent);
+    const events = await get<QuakeEvent[]>("/api/events", { scope });
     if (!isCurrent() || key !== selectionKey()) return;
-    if (status && !DEMO) renderStale(status);
-    if (operations) operationsBox.innerHTML = renderOperations(operations, DEMO, demoPipelineExecuted);
     state.events = events ?? [];
     if (initialSelection) {
       initialSelection = false;
@@ -469,7 +580,7 @@ async function refresh(): Promise<void> {
       if (initialEvent) {
         state.uid = initialEvent.earthquake_uid;
         key = selectionKey();
-        map.focusEvent(initialEvent);
+        map.focusEvent(initialEvent, false);
       }
       rememberSelection();
     }
@@ -491,14 +602,20 @@ async function refresh(): Promise<void> {
     renderEventPanel();
     await refreshPublication(key, isCurrent);
     if (!isCurrent() || key !== selectionKey()) return;
-    clock.textContent = DEMO ? `Exemplo gerado em ${demoSnapshotAt ? utc(demoSnapshotAt) : "REPLAY"}` : `atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
+    clock.textContent = DEMO ? `Snapshot · ${demoSnapshotAt ? utc(demoSnapshotAt) : "REPLAY"}` : `Atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     clock.classList.remove("error");
+    feedback();
+    rememberSelection();
   }, (err) => {
     if (err instanceof PrivacyRecalculation) {
       sync.reset();
       paint(null, null, err.message);
+      feedback(err.message, true);
+    } else {
+      if (!state.shown) paint(null, null, "Não foi possível carregar a análise.");
+      feedback("Não foi possível atualizar a análise. Tente novamente.", true);
     }
-    clock.textContent = `erro: ${err instanceof Error ? err.message : String(err)}`;
+    clock.textContent = "Falha na atualização";
     clock.classList.add("error");
   });
 }
@@ -511,9 +628,16 @@ async function tick(): Promise<void> {
 }
 
 function changed(): void {
-  rememberSelection();
+  restoreInitialList = false;
+  restoreInitialComparison = false;
+  state.revisions = [];
+  operationsGeneration++;
+  operationsBox.innerHTML = '<h2>Operação da carteira</h2><p class="muted">Consultando o processamento…</p>';
+  operationsBox.setAttribute("aria-busy", "true");
+  staleBox.hidden = true;
   sync.reset();
-  paint(null, null, "Carregando.");
+  paint(null, null, "Carregando a publicação…");
+  rememberSelection();
   void tick();
 }
 
@@ -528,7 +652,7 @@ function selectEvent(uid: string): void {
 
 scopeSel.addEventListener("change", () => {
   scopeNote.textContent = SCOPE_NOTE[scopeSel.value as Scope];
-  scopeNote.className = `strip ${scopeSel.value}`;
+  scopeNote.className = `context-note ${scopeSel.value}`;
   scopeNote.hidden = scopeSel.value === "LIVE";
   changed();
 });
@@ -539,28 +663,60 @@ focusButton.addEventListener("click", () => {
   const event = state.events.find((event) => event.earthquake_uid === state.uid);
   if (event) map.focusEvent(event);
 });
-fitButton.addEventListener("click", () => map.fitAssets(state.assets));
+fitButton.addEventListener("click", () => map.fitAssets(visibleAssets()));
+retryAnalysis.addEventListener("click", () => { void start().catch(startupError); });
+retryRegion.addEventListener("click", () => { retryRegion.hidden = true; void loadRegion(); });
 drawAreaButton.addEventListener("click", () => map.startAreaSelection());
 finishAreaButton.addEventListener("click", () => { map.finishAreaSelection(); });
 undoAreaButton.addEventListener("click", () => map.undoAreaVertex());
 cancelAreaButton.addEventListener("click", () => map.cancelAreaSelection());
 clearAreaButton.addEventListener("click", () => map.clearAreaSelection());
-compareButton.addEventListener("click", () => { if (compareButton.getAttribute("aria-pressed") === "true") closeComparison(); else void loadComparison(); });
+compareButton.addEventListener("click", () => {
+  if (compareButton.getAttribute("aria-pressed") === "true") { closeComparison(); rememberSelection(); }
+  else void loadComparison();
+});
 comparisonBox.addEventListener("click", event => {
   const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button") : null;
   if (!target || target.disabled) return;
-  if (target.hasAttribute("data-close-comparison")) closeComparison();
+  if (target.hasAttribute("data-close-comparison")) { closeComparison(true); rememberSelection(); }
+  else if (target.hasAttribute("data-retry-comparison")) void loadComparison(comparisonOffset);
+  else if (target.hasAttribute("data-focus-comparison")) { map.fitComparison(); revealPanel(el("map-wrap"), false); el("map").focus({ preventScroll: true }); }
   else if (state.comparison && target.dataset.comparisonPage) {
     const offset = state.comparison.offset + (target.dataset.comparisonPage === "next" ? state.comparison.limit : -state.comparison.limit);
     void loadComparison(Math.max(0, offset));
   }
 });
+comparisonBox.addEventListener("keydown", event => {
+  if (event.key === "Escape") { closeComparison(true); rememberSelection(); }
+});
+diffBox.addEventListener("click", event => {
+  if (event.target instanceof Element && event.target.closest("[data-open-comparison]")) void loadComparison();
+});
+operationsBox.addEventListener("click", event => {
+  if (event.target instanceof Element && event.target.closest("[data-retry-operations]")) void refreshOperations(() => true);
+});
+const mobileLayout = matchMedia("(max-width: 760px)");
+const mapActions = document.querySelector<HTMLElement>(".map-actions")!;
+function responsiveLayout(): void {
+  filtersPanel.open = !mobileLayout.matches;
+  if (mobileLayout.matches) el("map-wrap").insertBefore(mapActions, document.querySelector(".map-help"));
+  else document.querySelector(".map-heading")!.append(mapActions);
+}
+responsiveLayout();
+mobileLayout.addEventListener("change", responsiveLayout);
+if (location.hash === "#operations") el<HTMLDetailsElement>("operations-disclosure").open = true;
+document.querySelectorAll<HTMLAnchorElement>(".section-nav a").forEach(link => link.addEventListener("click", () => {
+  if (link.getAttribute("href") === "#operations") el<HTMLDetailsElement>("operations-disclosure").open = true;
+  document.querySelectorAll(".section-nav a").forEach(item => item.removeAttribute("aria-current"));
+  link.setAttribute("aria-current", "location");
+}));
 
 scopeNote.textContent = SCOPE_NOTE[scopeSel.value as Scope];
-scopeNote.className = `strip ${scopeSel.value}`;
+scopeNote.className = `context-note ${scopeSel.value}`;
 scopeNote.hidden = scopeSel.value === "LIVE";
 paint(null, null, "Escolha um evento.");
 async function start(): Promise<void> {
+  feedback("Carregando a análise…");
   if (DEMO) {
     const meta = await get<DemoMetadata & { pipeline_executed?: boolean }>("/api/demo");
     demoSnapshotAt = meta?.snapshot_at ?? "";
@@ -572,13 +728,21 @@ async function start(): Promise<void> {
     }
     scopeSel.value = "REPLAY";
     scopeSel.disabled = true;
+    document.querySelector<HTMLElement>(".scope-filter")!.hidden = true;
     if (meta?.available_modes?.length) {
       for (const option of Array.from(modeSel.options)) if (!meta.available_modes.includes(option.value as Mode)) option.remove();
+      document.querySelector<HTMLElement>(".mode-filter")!.hidden = modeSel.options.length === 1;
     }
-    el("demo-note").hidden = false;
-    el("demo-note").textContent = "Demonstração com capturas REPLAY e carteira fictícia. Selecione áreas e compare as publicações. As informações são um retrato dos dados, sem coleta ao vivo.";
-    scopeNote.textContent = SCOPE_NOTE.REPLAY;
+    document.querySelector<HTMLElement>(".filters")!.dataset.compact = String(modeSel.options.length === 1);
+    el("dataset-label").textContent = "REPLAY · Carteira fictícia";
+    document.querySelector(".dataset-details p")!.textContent = "Capturas do USGS reprocessadas com seu horário original. Carteira fictícia; snapshot sem coleta ao vivo.";
+    scopeNote.hidden = true;
   }
   await tick();
 }
-void start().catch(error => { clock.textContent = `Falha ao abrir: ${error instanceof Error ? error.message : "erro na leitura"}`; clock.classList.add("error"); });
+function startupError(error: unknown): void {
+  clock.textContent = "Falha ao abrir a análise";
+  clock.classList.add("error");
+  feedback(error instanceof PrivacyRecalculation ? error.message : "Não foi possível abrir a análise. Tente novamente.", true);
+}
+void start().catch(startupError);

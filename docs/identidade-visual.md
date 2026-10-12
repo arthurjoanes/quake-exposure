@@ -28,4 +28,22 @@ Cor acompanha rótulos, contagens e legendas. Valores de moedas diferentes ficam
 
 Bahnschrift, com Trebuchet MS e sans-serif como alternativas, no nome e nos títulos. Aptos, Segoe UI e sans-serif no texto e nos controles. As fontes vêm do sistema, sem requisições externas.
 
-O nome QuakeExposure mantém uma só cor. Títulos e conteúdo ficam alinhados à esquerda. O mapa ocupa a área principal, com resumo ao lado; gráficos e listas aparecem abaixo. As ondas ficam restritas à marca e ao banner, sem competir com os dados.
+O nome QuakeExposure mantém uma só cor. Títulos e conteúdo ficam alinhados à esquerda. O mapa ocupa a área principal, com resumo ao lado; resultado da área e comparação ficam próximos ao mapa, antes dos gráficos. As listas permanecem visíveis. Operação começa recolhida. As ondas ficam restritas à marca e ao banner.
+
+## Navegação e controles
+
+Os links Mapa, Gráficos, Ativos e Operação seguem a ordem da página. No celular, os filtros podem ser recolhidos para deixar o mapa acessível. REPLAY e a data do snapshot aparecem no cabeçalho. O contexto da captura fica na identificação expansível.
+
+As ações do mapa usam ícones SVG e rótulos curtos: Evento, Carteira, Área e Comparar. `aria-label` e `title` mantêm o nome completo da ação. O enquadramento passa de Carteira para Área quando há recorte. Concluir, Desfazer e Cancelar aparecem durante o desenho. A quantidade mínima de vértices define quando Concluir fica disponível.
+
+Foco de teclado deve permanecer visível. Controles possuem rótulos próprios; ícones e cores acompanham texto. A movimentação da página respeita a preferência por movimento reduzido.
+
+## Leitura dos resultados
+
+Na comparação, Anterior e Atual têm a mesma estrutura: situação, contagens e valores por moeda. A variação usa sinal e moeda. Um resultado indisponível permanece identificado como indisponível. Versões e identificadores ficam em Dados das publicações. Causas e alterações usam rótulos de domínio, como Versão da carteira, Posição e Entrou no critério.
+
+O contorno tracejado marca a posição anterior; o ponto preenchido marca a atual. Uma linha indica deslocamento. A tabela mantém o estado de classificação em texto junto às coordenadas. Abrir a comparação desloca o foco para o painel; Ver no mapa enquadra os ativos. O cabeçalho da comparação identifica seu contexto de carteira inteira. Como ler o mapa reúne a legenda de comparação.
+
+Gráficos ocupam a leitura principal; explicações de critérios, revisões e detalhes do evento ficam em controles expansíveis. Operação usa quatro etapas numeradas e abre pela navegação. Pendências, falhas e estado capturado recebem rótulos distintos. O snapshot público identifica o CDC não executado. Identificadores, estado bruto do conector e WAL ficam em detalhes recolhidos.
+
+Carregamento, resultado vazio e falha ocupam o painel correspondente. Falhas de análise e comparação oferecem Tentar novamente; a comparação pode ser fechada mesmo durante a consulta. Mensagens de estado usam texto curto e descrevem a ação disponível.

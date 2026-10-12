@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Asset } from "./api";
-import { filterAssets, orderAssets, paginateAssets, type AssetFilters } from "./asset-list";
+import { filterAssets, normalizeAssetListState, orderAssets, paginateAssets, type AssetFilters } from "./asset-list";
 
 const asset = (id: string, changes: Partial<Asset> = {}): Asset => ({
   asset_id: id,
@@ -66,5 +66,42 @@ describe("lista de ativos", () => {
   it("retorna um estado vazio consistente após filtro sem correspondência", () => {
     const filtered = filterAssets([asset("a")], filters({ search: "inexistente" }));
     expect(paginateAssets(filtered, 99, 50)).toEqual({ assets: [], page: 0, pages: 1, total: 0, first: 0, last: 0 });
+  });
+
+  it("reaplica a seleção sobre novos dados e limita a página quando os resultados diminuem", () => {
+    const selection = Object.freeze(filters({ search: " ope- ", status: "qualifying", currency: "USD" }));
+    const matching = Array.from({ length: 125 }, (_, index) =>
+      asset(`ope-${String(index).padStart(3, "0")}`, { qualifying: true, currency: "USD" }));
+    const excluded = [asset("ope-brl", { qualifying: true }),
+      asset("ope-elegivel", { currency: "USD" }), asset("seg-000", { qualifying: true, currency: "USD" })];
+    const original = [...matching, ...excluded];
+    const initial = paginateAssets(filterAssets(orderAssets(original), selection), 2, 50);
+    expect(initial).toMatchObject({ page: 2, pages: 3, total: 125, first: 101, last: 125 });
+
+    const revised = matching.slice(0, 62).map((item, index) => index === 61
+      ? { ...item, insured_value_minor: "999999999999999999999" } : item);
+    const updated = paginateAssets(filterAssets(orderAssets([...revised, ...excluded]), selection), initial.page, 50);
+    expect(updated).toMatchObject({ page: 1, pages: 2, total: 62, first: 51, last: 62 });
+    expect(updated.assets.map((item) => item.asset_id)).toEqual([
+      "ope-050", "ope-051", "ope-052", "ope-053", "ope-054", "ope-055",
+      "ope-056", "ope-057", "ope-058", "ope-059", "ope-060", "ope-061",
+    ]);
+    expect(updated.assets.at(-1)?.insured_value_minor).toBe("999999999999999999999");
+    expect(selection).toEqual({ search: " ope- ", status: "qualifying", currency: "USD" });
+
+    const missing = filterAssets(revised, { ...selection, search: "ausente" });
+    expect(paginateAssets(missing, updated.page, 50)).toMatchObject({ page: 0, total: 0 });
+    expect(filterAssets([...revised, ...excluded], filters())).toHaveLength(65);
+  });
+
+  it("valida o estado de navegação sem perder uma seleção válida", () => {
+    const state = { filters: filters({ search: " OPE-005 ", status: "eligible", currency: "USD" }), page: 4.8, pageSize: 100 };
+    expect(normalizeAssetListState(state)).toEqual({ ...state, page: 4 });
+    expect(state.page).toBe(4.8);
+    expect(normalizeAssetListState({ filters: { search: 17, status: "unknown", currency: "EUR" }, page: Infinity, pageSize: 200 }))
+      .toEqual({ filters: filters(), page: 0, pageSize: 50 });
+    expect(normalizeAssetListState({ filters: [], page: -4, pageSize: "100" }))
+      .toEqual({ filters: filters(), page: 0, pageSize: 50 });
+    expect(normalizeAssetListState(null)).toEqual({ filters: filters(), page: 0, pageSize: 50 });
   });
 });

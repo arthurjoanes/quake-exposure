@@ -74,7 +74,7 @@ function percentage(part: bigint, total: bigint): { width: number; text: string 
 }
 
 function panel(title: string, body: string, caption: string): string {
-  return `<article class="chart-panel"><h3 class="chart-heading">${title}</h3>${body}<p class="chart-caption">${caption}</p></article>`;
+  return `<article class="chart-panel"><h3 class="chart-heading">${title}</h3>${body}<details class="chart-details"><summary>Sobre o gráfico</summary><p class="chart-caption">${caption}</p></details></article>`;
 }
 
 function composition(data: ChartData): string {
@@ -95,7 +95,7 @@ function composition(data: ChartData): string {
   const legend = series.map((entry) => `<li><span class="chart-key" style="background:${entry.color}"></span><span>${entry.label}</span><strong>${count(entry.count)}</strong></li>`).join("");
   return panel(
     "Composição da carteira",
-    `<div class="chart-number">${count(data.qualifying)}<span class="chart-kicker"> de ${count(total)} ativos classificados</span></div>` +
+    `<div class="chart-number">${count(data.qualifying)}<span class="chart-kicker"> ${data.qualifying === 1 ? "classificado" : "classificados"} de ${count(total)} ${total === 1 ? "ativo" : "ativos"}</span></div>` +
     `<svg viewBox="0 0 320 24" width="100%" height="24" role="img" aria-label="${description}"><rect width="320" height="24" fill="#edf1f3"/>${bars}</svg>` +
     `<ul class="chart-legend">${legend}</ul>`,
     "Classificados fazem parte dos elegíveis. Categorias sem sobreposição; ativos vigentes no horário do evento.",
@@ -115,6 +115,7 @@ function mmiHistogram(data: ChartData): string {
   const description = data.mmi.map((entry) => `MMI ${entry.label}: ${count(entry.count)} ativos`).join("; ");
   return panel(
     "Intensidade nos ativos",
+    `<p class="chart-kicker">${count(measured)} com MMI · ${count(data.withoutMmi)} sem amostra elegível</p>` +
     `<svg viewBox="0 0 330 150" width="100%" role="img" aria-label="${escape(description)}"><line x1="4" x2="325" y1="120" y2="120" stroke="#dce4e8"/>${bars}</svg>`,
     `${count(measured)} ativos com MMI amostrado; ${count(data.withoutMmi)} sem amostra elegível. MMI ≥ 6,0 classifica. Ausência de MMI não é zero.`,
   );
