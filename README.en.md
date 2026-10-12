@@ -44,26 +44,32 @@ In the initial example, a retroactive correction moves `ope-00001` to a point wi
 The snapshot from October 11, 2026, 23:42 São Paulo time was calculated by the domain code from versioned captures. The public page offers MMI and identifies that CDC was not executed for this example. The local environment also offers the 100 km radius criterion and actual processing status. [Data and provenance](web/public/demo/snapshot.json) · [Exploration guide](docs/exploracao.md), in Portuguese.
 
 <details>
-<summary>View comparison and the mobile interface</summary>
+<summary>View charts, assets, comparison, operations and mobile</summary>
+
+![Charts showing portfolio composition, currency totals and MMI intensity](docs/results/ui-ux-charts.jpg)
+
+![Filtered classified assets, earthquake revisions and classification changes](docs/results/ui-ux-assets.jpg)
 
 ![Comparison with positions and previous, current and changed amounts by currency](docs/results/ui-ux-comparison.jpg)
 
-[Mobile interface](docs/results/ui-ux-mobile.jpg)
+![REPLAY snapshot processing and portfolio publications](docs/results/ui-ux-operations.jpg)
+
+<img src="docs/results/ui-ux-mobile.jpg" alt="Map and collapsible filters in the mobile interface" width="390">
 
 </details>
 
-Interface captures from October 12, 2026, using the snapshot described above.
+Public-site captures from October 12, 2026, using the REPLAY snapshot described above.
 
 <details>
-<summary>View operations and earlier captures</summary>
+<summary>Earlier captures</summary>
 
 [Area selection in the earlier presentation](docs/results/ui-exploration.png) · [Earlier comparison](docs/results/ui-comparison.png)
 
-![Portfolio, CDC, calculation and result flow](docs/results/ui-operations.png)
+[Operations in the earlier presentation](docs/results/ui-operations.png)
 
-![Portfolio composition, currency totals and MMI distribution](docs/results/ui-map-charts.png)
+[Charts in the earlier presentation](docs/results/ui-map-charts.png)
 
-![Asset list, revisions and classification changes](docs/results/ui-assets.png)
+[Asset list and revisions in the earlier presentation](docs/results/ui-assets.png)
 
 [Charts on mobile](docs/results/ui-mobile-charts.png)
 

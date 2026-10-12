@@ -44,26 +44,32 @@ No exemplo inicial, a correção retroativa de `ope-00001` muda sua posição pa
 O snapshot de 11/10/2026, 23:42 em São Paulo, foi calculado pelo domínio a partir das capturas versionadas. A página pública oferece MMI e identifica que o CDC não foi executado nesse exemplo. O ambiente local também oferece raio de 100 km e o estado real do processamento. [Dados e origem](web/public/demo/snapshot.json) · [Guia de exploração](docs/exploracao.md).
 
 <details>
-<summary>Ver comparação e interface no celular</summary>
+<summary>Ver gráficos, ativos, comparação, operação e celular</summary>
+
+![Gráficos de composição da carteira, valores por moeda e intensidade MMI](docs/results/ui-ux-charts.jpg)
+
+![Lista filtrada de ativos classificados, revisões do terremoto e entradas e saídas](docs/results/ui-ux-assets.jpg)
 
 ![Comparação de posições e valores anteriores, atuais e sua variação por moeda](docs/results/ui-ux-comparison.jpg)
 
-[Interface no celular](docs/results/ui-ux-mobile.jpg)
+![Operação do snapshot REPLAY e publicações da carteira](docs/results/ui-ux-operations.jpg)
+
+<img src="docs/results/ui-ux-mobile.jpg" alt="Mapa e filtros recolhíveis na interface para celular" width="390">
 
 </details>
 
-Capturas da interface em 12/10/2026, com o snapshot descrito acima.
+Capturas do site público em 12/10/2026, com o snapshot REPLAY descrito acima.
 
 <details>
-<summary>Ver operação e capturas anteriores</summary>
+<summary>Capturas anteriores</summary>
 
 [Seleção por área na apresentação anterior](docs/results/ui-exploration.png) · [Comparação anterior](docs/results/ui-comparison.png)
 
-![Fluxo da carteira, CDC, cálculo e resultado](docs/results/ui-operations.png)
+[Operação na apresentação anterior](docs/results/ui-operations.png)
 
-![Composição da carteira, valores por moeda e intensidade MMI](docs/results/ui-map-charts.png)
+[Gráficos na apresentação anterior](docs/results/ui-map-charts.png)
 
-![Lista de ativos, revisões e mudanças de classificação](docs/results/ui-assets.png)
+[Lista e revisões na apresentação anterior](docs/results/ui-assets.png)
 
 [Gráficos no celular](docs/results/ui-mobile-charts.png)
 
