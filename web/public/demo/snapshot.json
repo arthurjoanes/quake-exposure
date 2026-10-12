@@ -1,0 +1,467 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "snapshot_at": "2026-10-12T02:42:36.876Z",
+    "source_commit": "9e579fc91df567abbf99e2d754865ffe78794a95",
+    "source_tree_sha256": "4c0e181d9750d0c50cfdbac0a0323c07fbd98541afbe85e27f942935ac0ce798",
+    "fixture_manifest_sha256": "8d45fe26f75c3221082921e2ce7d11d06959c103a322d8ec7c3101d10b5f9889",
+    "scope": "REPLAY",
+    "portfolio": "synthetic",
+    "seed": 42,
+    "assets": 10000,
+    "available_modes": [
+      "SHAKEMAP_MMI"
+    ],
+    "default_selection": {
+      "tenant": "operadora-b",
+      "event": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+      "mode": "SHAKEMAP_MMI"
+    },
+    "scenario": {
+      "title": "Mudanças de posição da carteira",
+      "tenant": "operadora-b",
+      "event": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+      "mode": "SHAKEMAP_MMI",
+      "publication_id": "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2",
+      "previous_publication_id": "601b291effb377df6af0c4ea37ba6a04fa9bc3f19376a86f5e78ab134714a95d",
+      "changes": 1
+    },
+    "computation": "domain-fixtures",
+    "pipeline_executed": false,
+    "portfolio_epochs": [
+      1,
+      2,
+      3
+    ],
+    "moved_share": 0.05,
+    "movement_effective_at": "2026-09-25T00:00:00.000Z",
+    "correction": {
+      "tenant": "operadora-b",
+      "asset_id": "ope-00001",
+      "asset_interval_id": "ope-00001#1",
+      "known_epoch": 3,
+      "valid_from": "2025-01-01T00:00:00.000Z",
+      "before": {
+        "lon": 120.94563,
+        "lat": -8.19035,
+        "mmi": 4.0
+      },
+      "after": {
+        "lon": 120.566412,
+        "lat": -8.290310447761193,
+        "mmi": 6.7
+      },
+      "currency": "USD",
+      "insured_value_minor": "1613163"
+    }
+  },
+  "tenants": [
+    {
+      "tenant_id": "seguradora-a",
+      "name": "Seguradora A"
+    },
+    {
+      "tenant_id": "operadora-b",
+      "name": "Operadora B"
+    }
+  ],
+  "events": [
+    {
+      "earthquake_uid": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+      "preferred_id": "us7000tiur",
+      "stream_scope": "REPLAY",
+      "lifecycle": "ACTIVE",
+      "event_time": "2026-09-21T01:41:36.315Z",
+      "lon": 120.5793,
+      "lat": -8.307,
+      "depth_km": 10.0,
+      "mag": 5.5,
+      "event_type": "earthquake",
+      "source_updated_at": "2026-09-22T01:50:09.881Z",
+      "product_revision_id": "urn:usgs-product:us:shakemap:us7000tiur:1790041565495",
+      "revisions": 1
+    },
+    {
+      "earthquake_uid": "8945f649-b0ef-556e-86ea-d3ff2926ef62",
+      "preferred_id": "us6000u0hy",
+      "stream_scope": "REPLAY",
+      "lifecycle": "ACTIVE",
+      "event_time": "2026-10-06T16:48:22.347Z",
+      "lon": 154.9316,
+      "lat": 48.4437,
+      "depth_km": 29.0,
+      "mag": 5.8,
+      "event_type": "earthquake",
+      "source_updated_at": "2026-10-07T16:54:47.721Z",
+      "product_revision_id": "urn:usgs-product:us:shakemap:us6000u0hy:1791391956496",
+      "revisions": 1
+    }
+  ],
+  "revisions": {
+    "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d": [
+      {
+        "revision_id": "4f444e9564b43ccf05982b7d59a2507f6082894597659d815be88e9c63e483eb",
+        "provider_event_id": "us7000tiur",
+        "source_updated_at": "2026-09-22T01:50:09.881Z",
+        "mag": 5.5,
+        "lon": 120.5793,
+        "lat": -8.307,
+        "status": "reviewed",
+        "event_type": "earthquake"
+      }
+    ],
+    "8945f649-b0ef-556e-86ea-d3ff2926ef62": [
+      {
+        "revision_id": "bac40dff59a0bfc90dce3187056933eb191673923e836a5df299a0f012c59f57",
+        "provider_event_id": "us6000u0hy",
+        "source_updated_at": "2026-10-07T16:54:47.721Z",
+        "mag": 5.8,
+        "lon": 154.9316,
+        "lat": 48.4437,
+        "status": "reviewed",
+        "event_type": "earthquake"
+      }
+    ]
+  },
+  "status": {
+    "sources": {
+      "feed": {
+        "last_ok_age_s": null,
+        "stale": true,
+        "last_error": null
+      },
+      "incremental": {
+        "last_ok_age_s": null,
+        "stale": true,
+        "last_error": null
+      }
+    },
+    "cdc": {
+      "connector_state": "NOT_CONNECTED",
+      "task_state": "NOT_CONNECTED",
+      "pending_transactions": 0,
+      "retained_wal_bytes": null,
+      "stale": true
+    },
+    "jobs_pending": 0,
+    "jobs_failed": 0,
+    "publications_outdated": 0,
+    "generated_at": "2026-10-12T02:42:36.876Z"
+  },
+  "operations": {
+    "seguradora-a": {
+      "generated_at": "2026-10-12T02:42:36.876Z",
+      "tenant_id": "seguradora-a",
+      "cdc": {
+        "connector_state": "NOT_CONNECTED",
+        "task_state": "NOT_CONNECTED",
+        "pending_transactions": 0,
+        "retained_wal_bytes": null,
+        "stale": true
+      },
+      "jobs": {
+        "pending": 0,
+        "leased": 0,
+        "failed": 0,
+        "outdated": 0
+      },
+      "epochs": {
+        "portfolio": 3,
+        "source": 1,
+        "privacy": 0
+      },
+      "publications": [
+        {
+          "publication_id": "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569",
+          "earthquake_uid": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+          "stream_scope": "REPLAY",
+          "mode": "SHAKEMAP_MMI",
+          "generation": 3,
+          "status": "COMPLETE",
+          "published_at": "2026-10-12T02:42:36.876Z",
+          "calculated_at": "2026-10-12T02:42:36.876Z",
+          "publication_delay_s": null,
+          "calculation_duration_s": null
+        },
+        {
+          "publication_id": "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1",
+          "earthquake_uid": "8945f649-b0ef-556e-86ea-d3ff2926ef62",
+          "stream_scope": "REPLAY",
+          "mode": "SHAKEMAP_MMI",
+          "generation": 3,
+          "status": "COMPLETE",
+          "published_at": "2026-10-12T02:42:36.876Z",
+          "calculated_at": "2026-10-12T02:42:36.876Z",
+          "publication_delay_s": null,
+          "calculation_duration_s": null
+        }
+      ],
+      "last_publication_at": "2026-10-12T02:42:36.876Z",
+      "sources": {
+        "feed": {
+          "last_ok_age_s": null,
+          "stale": true,
+          "last_error": null
+        },
+        "incremental": {
+          "last_ok_age_s": null,
+          "stale": true,
+          "last_error": null
+        }
+      }
+    },
+    "operadora-b": {
+      "generated_at": "2026-10-12T02:42:36.876Z",
+      "tenant_id": "operadora-b",
+      "cdc": {
+        "connector_state": "NOT_CONNECTED",
+        "task_state": "NOT_CONNECTED",
+        "pending_transactions": 0,
+        "retained_wal_bytes": null,
+        "stale": true
+      },
+      "jobs": {
+        "pending": 0,
+        "leased": 0,
+        "failed": 0,
+        "outdated": 0
+      },
+      "epochs": {
+        "portfolio": 3,
+        "source": 1,
+        "privacy": 0
+      },
+      "publications": [
+        {
+          "publication_id": "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2",
+          "earthquake_uid": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+          "stream_scope": "REPLAY",
+          "mode": "SHAKEMAP_MMI",
+          "generation": 3,
+          "status": "COMPLETE",
+          "published_at": "2026-10-12T02:42:36.876Z",
+          "calculated_at": "2026-10-12T02:42:36.876Z",
+          "publication_delay_s": null,
+          "calculation_duration_s": null
+        },
+        {
+          "publication_id": "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4",
+          "earthquake_uid": "8945f649-b0ef-556e-86ea-d3ff2926ef62",
+          "stream_scope": "REPLAY",
+          "mode": "SHAKEMAP_MMI",
+          "generation": 3,
+          "status": "COMPLETE",
+          "published_at": "2026-10-12T02:42:36.876Z",
+          "calculated_at": "2026-10-12T02:42:36.876Z",
+          "publication_delay_s": null,
+          "calculation_duration_s": null
+        }
+      ],
+      "last_publication_at": "2026-10-12T02:42:36.876Z",
+      "sources": {
+        "feed": {
+          "last_ok_age_s": null,
+          "stale": true,
+          "last_error": null
+        },
+        "incremental": {
+          "last_ok_age_s": null,
+          "stale": true,
+          "last_error": null
+        }
+      }
+    }
+  },
+  "current": [
+    {
+      "publication_id": "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569",
+      "generation": 3,
+      "result": {
+        "calculation_id": "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+          "event_semantic_sha256": "de75d25c8e5f012eff4db3a66f45f0b907277bfb8d833792ee5ca382951270ce",
+          "product_revision_id": "urn:usgs-product:us:shakemap:us7000tiur:1790041565495",
+          "tenant_id": "seguradora-a",
+          "portfolio_epoch": 3,
+          "portfolio_source_epoch": 1,
+          "mode": "SHAKEMAP_MMI",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 1959,
+        "qualifying_count": 31,
+        "qualifying_value_minor": {
+          "BRL": "289536422",
+          "USD": "118961538"
+        },
+        "calculated_at": "2026-10-12T02:42:36.876Z",
+        "published_at": "2026-10-12T02:42:36.876Z",
+        "limitations": [
+          "MMI_FROM_NEAREST_GRID_NODE",
+          "TRIAGE_RULE_NOT_DAMAGE_MODEL"
+        ]
+      }
+    },
+    {
+      "publication_id": "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2",
+      "generation": 3,
+      "result": {
+        "calculation_id": "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "cab99e65-f2fe-5dc9-9280-b22ad5cb4a3d",
+          "event_semantic_sha256": "de75d25c8e5f012eff4db3a66f45f0b907277bfb8d833792ee5ca382951270ce",
+          "product_revision_id": "urn:usgs-product:us:shakemap:us7000tiur:1790041565495",
+          "tenant_id": "operadora-b",
+          "portfolio_epoch": 3,
+          "portfolio_source_epoch": 1,
+          "mode": "SHAKEMAP_MMI",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 1972,
+        "qualifying_count": 46,
+        "qualifying_value_minor": {
+          "BRL": "86434666",
+          "USD": "516400833"
+        },
+        "calculated_at": "2026-10-12T02:42:36.876Z",
+        "published_at": "2026-10-12T02:42:36.876Z",
+        "limitations": [
+          "MMI_FROM_NEAREST_GRID_NODE",
+          "TRIAGE_RULE_NOT_DAMAGE_MODEL"
+        ]
+      }
+    },
+    {
+      "publication_id": "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1",
+      "generation": 3,
+      "result": {
+        "calculation_id": "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "8945f649-b0ef-556e-86ea-d3ff2926ef62",
+          "event_semantic_sha256": "8d5e3a7ec2ae5cc91d5ddc89d48d5227f659aed0c21a692dedaa5eeb773f6e4d",
+          "product_revision_id": "urn:usgs-product:us:shakemap:us6000u0hy:1791391956496",
+          "tenant_id": "seguradora-a",
+          "portfolio_epoch": 3,
+          "portfolio_source_epoch": 1,
+          "mode": "SHAKEMAP_MMI",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 1051,
+        "qualifying_count": 0,
+        "qualifying_value_minor": {
+          "BRL": "0",
+          "USD": "0"
+        },
+        "calculated_at": "2026-10-12T02:42:36.876Z",
+        "published_at": "2026-10-12T02:42:36.876Z",
+        "limitations": [
+          "MMI_FROM_NEAREST_GRID_NODE",
+          "TRIAGE_RULE_NOT_DAMAGE_MODEL"
+        ]
+      }
+    },
+    {
+      "publication_id": "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4",
+      "generation": 3,
+      "result": {
+        "calculation_id": "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4",
+        "input_vector": {
+          "stream_scope": "REPLAY",
+          "earthquake_uid": "8945f649-b0ef-556e-86ea-d3ff2926ef62",
+          "event_semantic_sha256": "8d5e3a7ec2ae5cc91d5ddc89d48d5227f659aed0c21a692dedaa5eeb773f6e4d",
+          "product_revision_id": "urn:usgs-product:us:shakemap:us6000u0hy:1791391956496",
+          "tenant_id": "operadora-b",
+          "portfolio_epoch": 3,
+          "portfolio_source_epoch": 1,
+          "mode": "SHAKEMAP_MMI",
+          "privacy_epoch": 0,
+          "rule_version": "fd98802459856a2a0481705a27454a4602fc5c860d04860704e5e35ca08b6f41"
+        },
+        "status": "COMPLETE",
+        "eligible_count": 1043,
+        "qualifying_count": 0,
+        "qualifying_value_minor": {
+          "BRL": "0",
+          "USD": "0"
+        },
+        "calculated_at": "2026-10-12T02:42:36.876Z",
+        "published_at": "2026-10-12T02:42:36.876Z",
+        "limitations": [
+          "MMI_FROM_NEAREST_GRID_NODE",
+          "TRIAGE_RULE_NOT_DAMAGE_MODEL"
+        ]
+      }
+    }
+  ],
+  "publications": {
+    "93814e43e8af409026894df959a4d6ab0bfd2ec3ed2b72502d7ee30834aa9af5": {
+      "tenant": "seguradora-a",
+      "file": "93814e43e8af409026894df959a4d6ab0bfd2ec3ed2b72502d7ee30834aa9af5.json",
+      "sha256": "5db139bfbd8bbdcf8ad3b9238da0121a3b67a58708d300170b7723243d36eb9a"
+    },
+    "c7b6120c24df8422ce9f521d6e578766498ac1b4a9fffb59212d530bcbb37113": {
+      "tenant": "seguradora-a",
+      "file": "c7b6120c24df8422ce9f521d6e578766498ac1b4a9fffb59212d530bcbb37113.json",
+      "sha256": "13cbc57b91dfec85314edcde982b386ebc50f89d6a097c98919114ebcc88e01a"
+    },
+    "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569": {
+      "tenant": "seguradora-a",
+      "file": "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569.json",
+      "sha256": "57af2c084082393d857da41a2fe11fdac45a561f6072a3981f9d36e7cc7afe79"
+    },
+    "2ff5329f595dfc29392af724a86ca2860cc27be5c584f8b9d37c429419281218": {
+      "tenant": "operadora-b",
+      "file": "2ff5329f595dfc29392af724a86ca2860cc27be5c584f8b9d37c429419281218.json",
+      "sha256": "3615aec791c3288ca7a01464b606815a1c3d114062d1951b99118605017009c2"
+    },
+    "601b291effb377df6af0c4ea37ba6a04fa9bc3f19376a86f5e78ab134714a95d": {
+      "tenant": "operadora-b",
+      "file": "601b291effb377df6af0c4ea37ba6a04fa9bc3f19376a86f5e78ab134714a95d.json",
+      "sha256": "4bafa5ffcd9d95edc1c120d197371f04e8b491124e2ffbd281b4512c1a34705c"
+    },
+    "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2": {
+      "tenant": "operadora-b",
+      "file": "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2.json",
+      "sha256": "cf61c9df2617543c8115c248df1a9c79c4138476fb3d2babf883dd59689d0efd"
+    },
+    "868903f010fc8f1c2e40b6175cc54d67600b7625867aded723d26b7248960673": {
+      "tenant": "seguradora-a",
+      "file": "868903f010fc8f1c2e40b6175cc54d67600b7625867aded723d26b7248960673.json",
+      "sha256": "11aebf6c9eaef38b8a54b6dedea0e8753821297b1e0ae53543615667e130a375"
+    },
+    "34bd055892f8c86437b1603dfd4594ecc8ac109ca10330e0c10808aef8d4223b": {
+      "tenant": "seguradora-a",
+      "file": "34bd055892f8c86437b1603dfd4594ecc8ac109ca10330e0c10808aef8d4223b.json",
+      "sha256": "c8b772560b46a51e4f1395cf728d8ea21b591dde77e2c682daf77e238e75f053"
+    },
+    "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1": {
+      "tenant": "seguradora-a",
+      "file": "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1.json",
+      "sha256": "339db7c0cd9615414048d67b54988b7dcb70bb9967eab6d5397b9ed8ed730422"
+    },
+    "b834ff3f311baf5a391fd592e169103990594c837d35e0ec4a34f1634ff34038": {
+      "tenant": "operadora-b",
+      "file": "b834ff3f311baf5a391fd592e169103990594c837d35e0ec4a34f1634ff34038.json",
+      "sha256": "56303cafaddb321c953fe4e00add1a13ba081e1b9791e4a841ca88d588ebff92"
+    },
+    "5aeed47376ae18aee0c550e58c8efb6e29baa844ae54f6b26da3210df29d5673": {
+      "tenant": "operadora-b",
+      "file": "5aeed47376ae18aee0c550e58c8efb6e29baa844ae54f6b26da3210df29d5673.json",
+      "sha256": "eb6cc6831ba55b64aae8d351d03d718e0d3fb5d4d366f3dd9d21a4423cedeaa9"
+    },
+    "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4": {
+      "tenant": "operadora-b",
+      "file": "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4.json",
+      "sha256": "300d0ff68bf15662e09e59b3023ceb643b98d713d3d2a4f7ad8e0c8613b2bc41"
+    }
+  }
+}

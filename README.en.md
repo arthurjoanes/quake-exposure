@@ -4,7 +4,7 @@
 
 # QuakeExposure
 
-Asset exposure triage using real USGS earthquakes and a fictional portfolio. I built the collector, geographic calculations, portfolio updates through CDC, and dashboard for inspecting classified assets and following revisions.
+Asset exposure inspection using USGS earthquakes and ShakeMap data with a fictional portfolio. The dashboard combines a map, charts, lists, and publication comparison. Collection, geographic calculations, and portfolio updates through CDC preserve each result's history.
 
 <p>
   <a href="#demo"><img src="docs/readme/badges/demo.en.svg" alt="Demo" width="139" height="28"></a>
@@ -14,7 +14,7 @@ Asset exposure triage using real USGS earthquakes and a fictional portfolio. I b
   <a href="https://www.linkedin.com/in/arthur-joanes-6a2967373/"><img src="docs/readme/badges/linkedin.svg" alt="Arthur Joanes on LinkedIn" width="108" height="28"></a>
 </p>
 
-[Português](README.md)
+[Open demo](https://arthurjoanes.github.io/quake-exposure/) · [Português](README.md)
 
 [![CI](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml/badge.svg)](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml)
 
@@ -33,10 +33,20 @@ The criteria select assets for inspection. Amounts represent the classified port
 
 ## Demo
 
-![QuakeExposure dashboard with asset map and currency totals](docs/results/ui-overview.png)
+![QuakeExposure dashboard with geographic selection and currency totals](docs/results/ui-exploration.png)
+
+The [online demo](https://arthurjoanes.github.io/quake-exposure/) runs in the browser with REPLAY captures and 10,000 fictional assets. Select an area to draw a polygon; its assets appear in the list, with amounts by currency. Map comparison shows previous and current positions alongside both publication summaries.
+
+In the initial example, a retroactive correction moves `ope-00001` to a point with MMI 6.7. Classified assets increase from 45 to 46, and the USD amount rises from USD 5,147,876.70 to USD 5,164,008.33. The asset is worth USD 16,131.63; BRL remains BRL 864,346.66. The grid is an original capture; the correction belongs to the fictional portfolio.
+
+The snapshot from October 11, 2026, 23:42 São Paulo time was calculated by the domain code from versioned captures. The public page offers MMI and identifies that CDC was not executed for this example. The local environment also offers the 100 km radius criterion and actual processing status. [Data and provenance](web/public/demo/snapshot.json) · [Exploration guide](docs/exploracao.md), in Portuguese.
 
 <details>
-<summary>View charts, asset lists and mobile layout</summary>
+<summary>View comparison, operations and earlier captures</summary>
+
+![Position, classification and amount comparison between publications](docs/results/ui-comparison.png)
+
+![Portfolio, CDC, calculation and result flow](docs/results/ui-operations.png)
 
 ![Portfolio composition, currency totals and MMI distribution](docs/results/ui-map-charts.png)
 
@@ -46,7 +56,7 @@ The criteria select assets for inspection. Amounts represent the classified port
 
 </details>
 
-Local captures from October 9, 2026, using REPLAY data and a fictional portfolio. The demo changes the portfolio and erases one asset; the Operadora B screenshot therefore shows 4,999 assets after an initial load of 5,000 in that portfolio.
+The chart, asset-list and mobile captures above are from October 9, 2026. That local run erased one asset; Operadora B contained 4,999 after an initial load of 5,000. The online snapshot uses a separate load and a portfolio correction, without executing erasure.
 
 In the [run recorded on October 9, 2026](docs/results/verify-demo.json), event `us7000tiur`, portfolio Operadora B, and criterion MMI ≥ 6.0 produced:
 
@@ -57,11 +67,13 @@ In the [run recorded on October 9, 2026](docs/results/verify-demo.json), event `
 | Classified amount in BRL | BRL 864,346.66 |
 | Classified amount in USD | USD 5,147,876.70 |
 
-To inspect this scenario in the dashboard:
+To explore the dashboard:
 
 1. Select REPLAY, Operadora B, `us7000tiur`, and the MMI criterion. Inspect portfolio composition, amounts by currency, and intensity distribution in the charts.
 2. Filter the asset list by classified status and currency. Search for an ID or locate an asset on the map. Pages contain 50 or 100 rows; list filters do not change chart totals.
-3. Inspect revisions and entries and exits between publications. Scope, portfolio, event, and criterion are stored in the URL.
+3. Draw an area on the map. Drag its vertices to adjust it or clear the area to restore the entire portfolio. Area results remain separate from the global summary.
+4. Compare on the map to inspect the previous publication, positions and classification changes. Changes are paginated.
+5. Open operations to inspect portfolio, CDC, queues and publications. In the public demo, this section explains the snapshot calculation. Scope, portfolio, event, and criterion are stored in the URL.
 
 The map uses OpenStreetMap streets and places, with point clustering at lower zoom levels. The offline alternative includes Natural Earth countries and coastlines at 1:50 million scale. Online tiles require internet access; portfolio data comes from the local API. A missing ShakeMap appears as unavailable, without assigning zero intensity to assets. The application interface is in Brazilian Portuguese.
 
@@ -92,7 +104,7 @@ All [Compose](compose.yaml) services run on the same host. The API serves the pa
 | Historical portfolio | [Source](src/quakeexposure/portfolio/source.py) and [CDC](src/quakeexposure/cdc/): idempotent commands, a tenant epoch, and complete-transaction application. [ADR](docs/adr/0002-kafka-na-carteira.md). |
 | Consistent publication | [Worker](src/quakeexposure/exposure/worker.py): facts, totals, and the current pointer commit together; stale generations cannot publish. [ADR](docs/adr/0003-calculo-e-cas.md). |
 | Erasure and restore | [Privacy](src/quakeexposure/privacy/): ledger in a separate volume, old CDC sanitization, and current blocks reapplied during restore. [ADR](docs/adr/0004-exclusao-contra-replay.md). |
-| Visualization | [Frontend](web/src/): stale selection responses are discarded; charts validate publication identity; money remains integer until formatting. |
+| Exploration and operations | [Frontend](web/src/) and [API](src/quakeexposure/api/): bounded regional queries, polygon selection, paginated comparison and processing status. Stale responses are discarded; monetary amounts remain integer. [ADR](docs/adr/0005-exploracao-e-demo.md). |
 
 ## Stack and decisions
 
@@ -139,6 +151,8 @@ The demo covers five steps: real replay, a FAULT revision and duplicate, a portf
 
 The [operations guide](docs/operacao.md), in Portuguese, contains commands for live collection, portfolio corrections, erasure, backup, and restore. It also explains how to record the demo with its commit and assertions. Optional grids from networks other than `us` are downloaded separately with hash checks.
 
+To generate the static demo from captures, see [Export the demo](docs/operacao.md#exportar-a-demonstração). GitHub Pages publication uses the [REPLAY workflow](.github/workflows/pages.yaml).
+
 ## Verification
 
 | Record | Result and scope |
@@ -148,6 +162,7 @@ The [operations guide](docs/operacao.md), in Portuguese, contains commands for l
 | [Empty-volume bootstrap](docs/results/m6-bootstrap-cold.md) | 356.907 s to the four main publications, with cached images and concurrent load documented in the record. |
 | [Tests and checks](docs/progress.md) | M6 completion: 307 Python tests with no skips. Frontend update: 80 frontend tests, typecheck, and build. |
 | [CI on October 9, 2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Five jobs completed at commit `7564a7c`: Python, frontend, PostGIS, integration, and security. |
+| [REPLAY snapshot](web/public/demo/snapshot.json) | Sources, seed, hashes and public-page scenario. [Exporter regressions](tests/unit/test_public_demo.py) check the example amounts. |
 
 To repeat the checks:
 
@@ -182,10 +197,12 @@ Tests only use local networking. Integration tests start real databases, Kafka, 
 | Reference | Link |
 | --- | --- |
 | Setup, operation, and recovery | [Runbook](docs/operacao.md) |
+| Area selection, comparison and processing | [Exploration guide](docs/exploracao.md) |
 | Implementation decisions | [ADRs](docs/adr/) · [Repository rules](CONTRIBUTING.md) |
 | Runs and measurements | [Results](docs/results/) · [Milestone progress](docs/progress.md) |
 | Visual identity | [Symbol](web/public/brand/quake-exposure-mark.svg) · [Wordmark](web/public/brand/wordmark.svg) · [Banner](docs/assets/banner.svg) |
 | Presentation maintenance | [Documentation style](docs/padrao-documentacao.md) · [Icon sources and license](docs/stack/README.md) |
+| Improvement references | [Projects and adaptations](docs/referencias.md) |
 
 <a id="author-data-and-license"></a>
 

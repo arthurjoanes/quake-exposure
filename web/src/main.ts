@@ -22,6 +22,12 @@ import { QuakeMap } from "./map-view";
 import { formatMinor } from "./money";
 import { PublicationSync } from "./publication";
 import { LatestRefresh } from "./refresh";
+import { renderArea } from "./exploration";
+import { renderComparison, type ComparisonResponse } from "./comparison-view";
+import { renderOperations, type OperationsResponse } from "./operations";
+import { filterAssetsInPolygon, type AreaPolygon } from "./spatial";
+import type { RegionResponse } from "./map-region";
+import type { DemoMetadata } from "./demo-api";
 
 const REFRESH_MS = 10_000;
 
@@ -65,6 +71,18 @@ const assetsBox = el("assets");
 const chartsBox = el("charts");
 const focusButton = el<HTMLButtonElement>("focus-event");
 const fitButton = el<HTMLButtonElement>("fit-assets");
+const drawAreaButton = el<HTMLButtonElement>("draw-area");
+const finishAreaButton = el<HTMLButtonElement>("finish-area");
+const undoAreaButton = el<HTMLButtonElement>("undo-area");
+const cancelAreaButton = el<HTMLButtonElement>("cancel-area");
+const clearAreaButton = el<HTMLButtonElement>("clear-area");
+const compareButton = el<HTMLButtonElement>("compare-map");
+const areaSummary = el("area-summary");
+const comparisonBox = el("comparison");
+const operationsBox = el("operations");
+const DEMO = import.meta.env.VITE_DEMO === "1";
+let demoSnapshotAt = "";
+let demoPipelineExecuted = true;
 const initialParams = new URLSearchParams(location.search);
 if (["LIVE", "REPLAY", "FAULT"].includes(initialParams.get("scope") ?? "")) scopeSel.value = initialParams.get("scope")!;
 if (["RADIUS_TRIAGE", "SHAKEMAP_MMI"].includes(initialParams.get("mode") ?? "")) modeSel.value = initialParams.get("mode")!;
@@ -74,21 +92,39 @@ const state = {
   revisions: [] as Revision[],
   uid: initialParams.get("event") ?? "",
   shown: null as CurrentPublication | null, // publicação cujos ativos, resumo e diff estão na tela
+  assets: [] as Asset[],
+  area: null as AreaPolygon | null,
+  comparison: null as ComparisonResponse | null,
 };
 const sync = new PublicationSync();
 const refreshes = new LatestRefresh();
 let eventSignature = "";
 let initialSelection = true;
+let regionGeneration = 0;
+let regionTimer = 0;
+let comparisonGeneration = 0;
 
 // ---------- mapa ----------
 
 const map = new QuakeMap("map", {
   onSelect: selectEvent,
   onBaseStatus: (message) => { el("map-base-status").textContent = message; },
+  onAreaChange: (polygon) => { state.area = polygon; applyArea(); },
+  onAreaStatus: ({ drawing, vertices, message }) => {
+    finishAreaButton.hidden = !drawing;
+    finishAreaButton.disabled = vertices < 3;
+    undoAreaButton.hidden = !drawing;
+    undoAreaButton.disabled = vertices === 0;
+    cancelAreaButton.hidden = !drawing;
+    clearAreaButton.hidden = drawing || !state.area;
+    drawAreaButton.disabled = drawing || state.shown?.result.status !== "COMPLETE";
+    el("area-status").textContent = message;
+  },
+  onViewportChange: () => scheduleRegion(),
   onDensityChange: ({ assets, groups, clustered }) => {
-    fitButton.disabled = assets === 0;
+    fitButton.disabled = state.assets.length === 0;
     el("map-density").textContent = assets === 0
-      ? "Selecione um terremoto para analisar a carteira."
+      ? state.shown ? "Nenhum ativo neste enquadramento." : "Selecione um terremoto para analisar a carteira."
       : clustered
         ? `${assets.toLocaleString("pt-BR")} ativos em ${groups.toLocaleString("pt-BR")} pontos e grupos. Amplie para separar.`
         : `${assets.toLocaleString("pt-BR")} ativos. Selecione um ponto para ver os detalhes.`;
@@ -98,6 +134,84 @@ const assetList = new AssetList(assetsBox, (asset) => {
   map.focusAsset(asset);
   el("map-wrap").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
 });
+
+function applyArea(): void {
+  if (!state.shown) return;
+  const assets = state.area ? filterAssetsInPolygon(state.assets, state.area) : state.assets;
+  assetList.setAssets(assets);
+  clearAreaButton.hidden = !state.area;
+  areaSummary.hidden = !state.area;
+  if (state.area) {
+    areaSummary.innerHTML = renderArea(assets);
+    const event = state.events.find(item => item.earthquake_uid === state.uid);
+    map.setAssets(assets, `${state.shown.publication_id}|${JSON.stringify(state.area)}`, state.shown.result.input_vector.mode, event);
+  } else {
+    areaSummary.innerHTML = "";
+    scheduleRegion();
+  }
+}
+
+function scheduleRegion(): void {
+  regionGeneration++;
+  clearTimeout(regionTimer);
+  if (!state.shown || state.area) return;
+  regionTimer = window.setTimeout(() => { void loadRegion(); }, 90);
+}
+
+async function loadRegion(): Promise<void> {
+  const publication = state.shown;
+  if (!publication || state.area) return;
+  const tenant = tenantSel.value;
+  const generation = ++regionGeneration;
+  const viewport = map.getViewport();
+  try {
+    const region = await get<RegionResponse>(`/api/publications/${encodeURIComponent(publication.publication_id)}/region`, {
+      tenant, ...Object.fromEntries(Object.entries(viewport).map(([key, value]) => [key, String(value)])), limit: "1200",
+    });
+    if (generation !== regionGeneration || tenant !== tenantSel.value || state.area || state.shown?.publication_id !== publication.publication_id) return;
+    if (!region || region.publication_id !== publication.publication_id) return;
+    map.setRegion(region, publication.publication_id, publication.result.input_vector.mode, state.events.find(item => item.earthquake_uid === state.uid));
+  } catch (error) {
+    if (generation !== regionGeneration || tenant !== tenantSel.value || state.shown?.publication_id !== publication.publication_id) return;
+    if (error instanceof PrivacyRecalculation) { sync.reset(); paint(null, null, error.message); }
+    else el("map-density").textContent = "Não foi possível consultar os ativos desta região. Mova o mapa para tentar novamente.";
+  }
+}
+
+async function loadComparison(offset = 0): Promise<void> {
+  const publication = state.shown;
+  if (!publication) return;
+  const tenant = tenantSel.value;
+  const generation = ++comparisonGeneration;
+  compareButton.disabled = true;
+  comparisonBox.hidden = false;
+  comparisonBox.innerHTML = "<h2>Comparação entre publicações</h2><p>Consultando as mudanças.</p>";
+  try {
+    const data = await get<ComparisonResponse>(`/api/publications/${encodeURIComponent(publication.publication_id)}/comparison`, { tenant, offset: String(offset), limit: "100" });
+    if (generation !== comparisonGeneration || tenant !== tenantSel.value || state.shown?.publication_id !== publication.publication_id) return;
+    if (!data || data.publication_id !== publication.publication_id) throw new Error("Comparação indisponível.");
+    state.comparison = data;
+    comparisonBox.innerHTML = `<div class="section-heading"><h2>Comparação entre publicações</h2><button type="button" data-close-comparison>Fechar comparação</button></div>${renderComparison(data)}`;
+    map.setComparison(data.changes);
+    if (data.changes.length && offset === 0) map.fitComparison();
+    compareButton.setAttribute("aria-pressed", "true");
+  } catch (error) {
+    if (generation !== comparisonGeneration || state.shown?.publication_id !== publication.publication_id) return;
+    if (error instanceof PrivacyRecalculation) { sync.reset(); paint(null, null, error.message); }
+    else { map.clearComparison(); comparisonBox.innerHTML = `<h2>Comparação entre publicações</h2><p>${esc(error instanceof Error ? error.message : "Falha ao consultar as mudanças.")}</p>`; }
+  } finally {
+    if (generation === comparisonGeneration) compareButton.disabled = !state.shown;
+  }
+}
+
+function closeComparison(): void {
+  comparisonGeneration++;
+  state.comparison = null;
+  comparisonBox.hidden = true;
+  comparisonBox.innerHTML = "";
+  compareButton.setAttribute("aria-pressed", "false");
+  map.clearComparison();
+}
 
 // ---------- formatação ----------
 
@@ -200,7 +314,7 @@ function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffRespon
     <div class="summary-heading"><h2>Exposição ${scopeBadge(r.input_vector.stream_scope)}</h2><span class="result-status">${STATUS_TEXT[r.status]}</span></div>
     <p class="summary-event"><strong>${esc(event?.preferred_id ?? "Terremoto")}</strong>${esc(event ? utc(event.event_time) : "")}</p>
     <dl class="summary-counts"><div class="classified"><dt>Classificados</dt><dd>${count(r.qualifying_count)}</dd></div><div><dt>Elegíveis</dt><dd>${count(r.eligible_count)}</dd></div></dl>
-    <dl class="currency-values"><div><dt>Valor classificado em BRL</dt><dd>${totals ? formatMinor(totals.BRL, "BRL") : "–"}</dd></div><div><dt>Valor classificado em USD</dt><dd>${totals ? formatMinor(totals.USD, "USD") : "–"}</dd></div></dl>
+    <dl class="currency-values"><div><dt>Valor classificado em BRL</dt><dd>${totals ? formatMinor(totals.BRL ?? "0", "BRL") : "–"}</dd></div><div><dt>Valor classificado em USD</dt><dd>${totals ? formatMinor(totals.USD ?? "0", "USD") : "–"}</dd></div></dl>
     <p class="muted">${MODE_NOTE[r.input_vector.mode]}</p>
     <details class="publication-details"><summary>Detalhes da publicação</summary><dl>
       <dt>Status</dt><dd>${r.status}</dd>
@@ -236,20 +350,34 @@ function build(pub: CurrentPublication, assets: AssetsResponse, diff: DiffRespon
 }
 
 function paint(pub: CurrentPublication | null, view: View | null, message = ""): void {
+  if (state.shown?.publication_id !== pub?.publication_id) closeComparison();
   state.shown = pub;
   if (view) {
     const event = state.events.find((event) => event.earthquake_uid === state.uid);
-    if (pub) map.setAssets(view.assets, pub.publication_id, pub.result.input_vector.mode, event);
+    state.assets = view.assets;
+    if (pub) map.setAssets([], pub.publication_id, pub.result.input_vector.mode, event);
     summaryBox.innerHTML = view.summary;
     diffBox.innerHTML = view.diff;
     chartsBox.innerHTML = view.charts;
-    assetList.setAssets(view.assets);
+    drawAreaButton.disabled = pub?.result.status !== "COMPLETE";
+    compareButton.disabled = false;
+    applyArea();
   } else {
+    regionGeneration++;
+    clearTimeout(regionTimer);
+    closeComparison();
+    state.assets = [];
+    state.area = null;
+    map.clearAreaSelection();
     map.clearAssets();
     assetList.clear();
     summaryBox.innerHTML = `<h2>Exposição</h2><p class="muted">${esc(message)}</p><p class="muted">${MODE_NOTE[modeSel.value as Mode]}</p>`;
     diffBox.innerHTML = "";
     chartsBox.innerHTML = `<div class="chart-empty"><p>${esc(message)} Os gráficos acompanham a publicação selecionada.</p></div>`;
+    drawAreaButton.disabled = true;
+    compareButton.disabled = true;
+    areaSummary.hidden = true;
+    clearAreaButton.hidden = true;
   }
   renderEventPanel();
 }
@@ -325,12 +453,14 @@ async function refresh(): Promise<void> {
     }
     let key = selectionKey();
     const { scope } = selection();
-    const [status, events] = await Promise.all([
+    const [status, events, operations] = await Promise.all([
       get<ApiStatus>("/api/status"),
       get<QuakeEvent[]>("/api/events", { scope }),
+      tenantSel.value ? get<OperationsResponse>("/api/operations", { tenant: tenantSel.value }) : Promise.resolve(null),
     ]);
     if (!isCurrent() || key !== selectionKey()) return;
-    if (status) renderStale(status);
+    if (status && !DEMO) renderStale(status);
+    if (operations) operationsBox.innerHTML = renderOperations(operations, DEMO, demoPipelineExecuted);
     state.events = events ?? [];
     if (initialSelection) {
       initialSelection = false;
@@ -361,7 +491,7 @@ async function refresh(): Promise<void> {
     renderEventPanel();
     await refreshPublication(key, isCurrent);
     if (!isCurrent() || key !== selectionKey()) return;
-    clock.textContent = `atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
+    clock.textContent = DEMO ? `Exemplo gerado em ${demoSnapshotAt ? utc(demoSnapshotAt) : "REPLAY"}` : `atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     clock.classList.remove("error");
   }, (err) => {
     if (err instanceof PrivacyRecalculation) {
@@ -377,7 +507,7 @@ let timer = 0;
 async function tick(): Promise<void> {
   await refresh();
   clearTimeout(timer);
-  timer = window.setTimeout(tick, REFRESH_MS);
+  if (!DEMO) timer = window.setTimeout(tick, REFRESH_MS);
 }
 
 function changed(): void {
@@ -409,10 +539,46 @@ focusButton.addEventListener("click", () => {
   const event = state.events.find((event) => event.earthquake_uid === state.uid);
   if (event) map.focusEvent(event);
 });
-fitButton.addEventListener("click", () => map.fitAssets());
+fitButton.addEventListener("click", () => map.fitAssets(state.assets));
+drawAreaButton.addEventListener("click", () => map.startAreaSelection());
+finishAreaButton.addEventListener("click", () => { map.finishAreaSelection(); });
+undoAreaButton.addEventListener("click", () => map.undoAreaVertex());
+cancelAreaButton.addEventListener("click", () => map.cancelAreaSelection());
+clearAreaButton.addEventListener("click", () => map.clearAreaSelection());
+compareButton.addEventListener("click", () => { if (compareButton.getAttribute("aria-pressed") === "true") closeComparison(); else void loadComparison(); });
+comparisonBox.addEventListener("click", event => {
+  const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button") : null;
+  if (!target || target.disabled) return;
+  if (target.hasAttribute("data-close-comparison")) closeComparison();
+  else if (state.comparison && target.dataset.comparisonPage) {
+    const offset = state.comparison.offset + (target.dataset.comparisonPage === "next" ? state.comparison.limit : -state.comparison.limit);
+    void loadComparison(Math.max(0, offset));
+  }
+});
 
 scopeNote.textContent = SCOPE_NOTE[scopeSel.value as Scope];
 scopeNote.className = `strip ${scopeSel.value}`;
 scopeNote.hidden = scopeSel.value === "LIVE";
 paint(null, null, "Escolha um evento.");
-void tick();
+async function start(): Promise<void> {
+  if (DEMO) {
+    const meta = await get<DemoMetadata & { pipeline_executed?: boolean }>("/api/demo");
+    demoSnapshotAt = meta?.snapshot_at ?? "";
+    demoPipelineExecuted = meta?.pipeline_executed !== false;
+    if (meta?.default_selection) {
+      if (!initialParams.has("tenant")) initialParams.set("tenant", meta.default_selection.tenant);
+      if (!initialParams.has("event")) state.uid = meta.default_selection.event;
+      if (!initialParams.has("mode")) modeSel.value = meta.default_selection.mode;
+    }
+    scopeSel.value = "REPLAY";
+    scopeSel.disabled = true;
+    if (meta?.available_modes?.length) {
+      for (const option of Array.from(modeSel.options)) if (!meta.available_modes.includes(option.value as Mode)) option.remove();
+    }
+    el("demo-note").hidden = false;
+    el("demo-note").textContent = "Demonstração com capturas REPLAY e carteira fictícia. Selecione áreas e compare as publicações. As informações são um retrato dos dados, sem coleta ao vivo.";
+    scopeNote.textContent = SCOPE_NOTE.REPLAY;
+  }
+  await tick();
+}
+void start().catch(error => { clock.textContent = `Falha ao abrir: ${error instanceof Error ? error.message : "erro na leitura"}`; clock.classList.add("error"); });

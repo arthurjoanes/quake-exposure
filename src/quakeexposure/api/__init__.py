@@ -13,6 +13,9 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 
+from quakeexposure.api.comparison import comparison
+from quakeexposure.api.operations import operations
+from quakeexposure.api.regional import Bounds, region
 from quakeexposure.db import ROOT, connect
 from quakeexposure.domain.canonical import iso_ms
 from quakeexposure.exposure.explain import calculation, diff, previous
@@ -170,6 +173,59 @@ def create_app(
             "entered": d["entered"],
             "left": d["left"],
         }
+
+    @app.get("/api/publications/{publication_id}/region")
+    def publication_region(
+        publication_id: str,
+        tenant: str,
+        conn: Db,
+        west: Annotated[float, Query(ge=-180, le=180, allow_inf_nan=False)],
+        south: Annotated[float, Query(ge=-90, le=90, allow_inf_nan=False)],
+        east: Annotated[float, Query(ge=-180, le=180, allow_inf_nan=False)],
+        north: Annotated[float, Query(ge=-90, le=90, allow_inf_nan=False)],
+        zoom: Annotated[int, Query(ge=0, le=22)] = 7,
+        limit: Annotated[int, Query(ge=1, le=2000)] = 2000,
+    ) -> dict[str, Any]:
+        if south > north:
+            raise HTTPException(422, "south deve ser menor ou igual a north")
+        _own(conn, publication_id, tenant)
+        return region(conn, publication_id, Bounds(west, south, east, north), zoom, limit)
+
+    @app.get("/api/publications/{publication_id}/comparison")
+    def publication_comparison(
+        publication_id: str,
+        tenant: str,
+        conn: Db,
+        limit: Annotated[int, Query(ge=1, le=2000)] = 2000,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> dict[str, Any]:
+        _own(conn, publication_id, tenant)
+        before = previous(conn, publication_id)
+        unavailable = "first_publication" if before is None else None
+        if before is not None:
+            try:
+                _own(conn, before, tenant)
+            except HTTPException as exc:
+                if exc.status_code != 409:
+                    raise
+                before = None
+                unavailable = "privacy_epoch"
+        return comparison(conn, before, publication_id, unavailable, limit, offset)
+
+    @app.get("/api/operations")
+    def operation_status(tenant: str, conn: Db) -> dict[str, Any]:
+        conn.execute(
+            "SELECT pg_advisory_xact_lock_shared(hashtextextended(%s, 0))",
+            (f"privacy-api:{tenant}",),
+        )
+        epochs = conn.execute(
+            """SELECT portfolio_epoch, source_epoch, privacy_epoch FROM portfolio.tenant
+               WHERE tenant_id = %s""",
+            (tenant,),
+        ).fetchone()
+        if epochs is None:
+            raise HTTPException(404, "carteira não encontrada")
+        return operations(conn, tenant, epochs, datetime.now(UTC))
 
     @app.get("/api/status")
     def status(conn: Db) -> dict[str, Any]:

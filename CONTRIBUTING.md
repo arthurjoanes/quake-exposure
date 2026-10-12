@@ -46,6 +46,7 @@ Não há Makefile. Comando novo entra como `uv run qe ...` ou `docker compose ..
 - Stack: Python com uv, httpx, psycopg 3, jsonschema, defusedxml, FastAPI, confluent-kafka (CDC), pytest, Hypothesis e geographiclib (só oráculo de teste); Ruff e mypy strict; PostgreSQL + PostGIS, Kafka KRaft e Kafka Connect com Debezium PostgreSQL; frontend TypeScript strict + Vite + Leaflet com npm. Versões fixadas em lockfile e por tag de imagem, nunca `latest`. Ferramenta fora dessa lista só com ADR aceito em `docs/adr/`.
 - Texto de README, docs e interface: pt-BR, curto e seco. Sem "evidência", "prova", "ensaio", "atestar", "assegurar", negrito no meio de parágrafo, slogan ou aviso defensivo. Código e identificadores em inglês.
 - `docs/progress.md` traz o estado real de cada milestone.
+- Mensagens de commit registram a mudança e seus autores humanos. Manter a redação direta da documentação e os créditos das bibliotecas e fontes.
 
 ## Domínio
 
@@ -140,6 +141,7 @@ Código em `exposure/`: `jobs.py` (escopo e marcação), `worker.py` (cálculo e
 - Página: mapa, gráficos, listas e valores sempre da mesma publicação; dinheiro só como string, agregação monetária em BigInt. Filtros e paginação da lista não alteram o total dos gráficos.
 - Mapa: Canvas, agrupamentos por zoom e cache por publicação; polling sem mudança não recria camadas. OpenStreetMap para ruas e lugares, Natural Earth 1:50m como alternativa offline. Manter atribuição visível e não fazer pré-carga de tiles.
 - Identidade visual: ativos SVG em `web/public/brand/`, apresentação em `docs/assets/`; paleta em `docs/identidade-visual.md`. Cores de mapa, gráficos e legenda devem corresponder.
+- Exploração: área e resumo global têm denominadores próprios; região limita o desenho do mapa. Comparações históricas passam pela mesma guarda de privacidade. O snapshot público aceita somente REPLAY e identifica o CDC não executado quando calculado a partir de fixtures.
 
 ## CDC da carteira
 
