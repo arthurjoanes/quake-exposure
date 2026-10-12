@@ -2,8 +2,8 @@
   "schema_version": 1,
   "metadata": {
     "snapshot_at": "2026-10-12T02:42:36.876Z",
-    "source_commit": "625605ea0f8f17a64c99ca7b73c014335e74ef55",
-    "source_tree_sha256": "4c0e181d9750d0c50cfdbac0a0323c07fbd98541afbe85e27f942935ac0ce798",
+    "source_commit": "3f678631c42591524648c045ec074bd78491bfe6",
+    "source_tree_sha256": "5ac08e14fd5d0e297f9a6adf769b21d5d7c44b9fc7f0f40ae440241ac26fdbd5",
     "fixture_manifest_sha256": "8d45fe26f75c3221082921e2ce7d11d06959c103a322d8ec7c3101d10b5f9889",
     "scope": "REPLAY",
     "portfolio": "synthetic",
@@ -406,62 +406,62 @@
     "93814e43e8af409026894df959a4d6ab0bfd2ec3ed2b72502d7ee30834aa9af5": {
       "tenant": "seguradora-a",
       "file": "93814e43e8af409026894df959a4d6ab0bfd2ec3ed2b72502d7ee30834aa9af5.json",
-      "sha256": "5db139bfbd8bbdcf8ad3b9238da0121a3b67a58708d300170b7723243d36eb9a"
+      "sha256": "ddcbdbe729efddfe128abee25fb3e2d3e1c06d4eafa0e459fb3bdfba39bdd7a9"
     },
     "c7b6120c24df8422ce9f521d6e578766498ac1b4a9fffb59212d530bcbb37113": {
       "tenant": "seguradora-a",
       "file": "c7b6120c24df8422ce9f521d6e578766498ac1b4a9fffb59212d530bcbb37113.json",
-      "sha256": "13cbc57b91dfec85314edcde982b386ebc50f89d6a097c98919114ebcc88e01a"
+      "sha256": "7649d945ba2ddccf60ee69cdc8c5a45f176f69a3c54464c5ce45384aea45a6a7"
     },
     "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569": {
       "tenant": "seguradora-a",
       "file": "c8526b21133cdec39e70f4e5e21e53718919af117f7dd2124f317166872a5569.json",
-      "sha256": "57af2c084082393d857da41a2fe11fdac45a561f6072a3981f9d36e7cc7afe79"
+      "sha256": "19f4e2c6d51034c28dcb830b8856107ed2a2459f65d463b76a8986b986a39ae4"
     },
     "2ff5329f595dfc29392af724a86ca2860cc27be5c584f8b9d37c429419281218": {
       "tenant": "operadora-b",
       "file": "2ff5329f595dfc29392af724a86ca2860cc27be5c584f8b9d37c429419281218.json",
-      "sha256": "3615aec791c3288ca7a01464b606815a1c3d114062d1951b99118605017009c2"
+      "sha256": "fa9b04b9b66a3eee53610e74d34a647992f97b831714828e5404cc53257fbabc"
     },
     "601b291effb377df6af0c4ea37ba6a04fa9bc3f19376a86f5e78ab134714a95d": {
       "tenant": "operadora-b",
       "file": "601b291effb377df6af0c4ea37ba6a04fa9bc3f19376a86f5e78ab134714a95d.json",
-      "sha256": "4bafa5ffcd9d95edc1c120d197371f04e8b491124e2ffbd281b4512c1a34705c"
+      "sha256": "8a616e0382d3bb0a1eb682d88fc6bba70e4b61cc754d20b6d8acf8f26c847d54"
     },
     "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2": {
       "tenant": "operadora-b",
       "file": "9647f0ed0c7becb45c5e3b09c8711aca92854dfff253c71bf5b3eb1cf63f9fe2.json",
-      "sha256": "cf61c9df2617543c8115c248df1a9c79c4138476fb3d2babf883dd59689d0efd"
+      "sha256": "06b5257e6dc580b5faa339e6633934714341a0bdc21712ea23bf32e536944db6"
     },
     "868903f010fc8f1c2e40b6175cc54d67600b7625867aded723d26b7248960673": {
       "tenant": "seguradora-a",
       "file": "868903f010fc8f1c2e40b6175cc54d67600b7625867aded723d26b7248960673.json",
-      "sha256": "11aebf6c9eaef38b8a54b6dedea0e8753821297b1e0ae53543615667e130a375"
+      "sha256": "5946c6260d3a02f97f889e922377d78277db2d7e67f7701c3ffd6d17f30b77b3"
     },
     "34bd055892f8c86437b1603dfd4594ecc8ac109ca10330e0c10808aef8d4223b": {
       "tenant": "seguradora-a",
       "file": "34bd055892f8c86437b1603dfd4594ecc8ac109ca10330e0c10808aef8d4223b.json",
-      "sha256": "c8b772560b46a51e4f1395cf728d8ea21b591dde77e2c682daf77e238e75f053"
+      "sha256": "563deee407b4ce1a2c2e46672fbe06c820fdb22076da475e7cfc7a4e1d465925"
     },
     "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1": {
       "tenant": "seguradora-a",
       "file": "0b9307bb0a92edb2a9ff3f830ba6274c8bbf184723029d5892b6c1060777e9e1.json",
-      "sha256": "339db7c0cd9615414048d67b54988b7dcb70bb9967eab6d5397b9ed8ed730422"
+      "sha256": "756e01c601bb1ce42490e32fd6b7eb8a13f1418f684432519bb55a4089fe556e"
     },
     "b834ff3f311baf5a391fd592e169103990594c837d35e0ec4a34f1634ff34038": {
       "tenant": "operadora-b",
       "file": "b834ff3f311baf5a391fd592e169103990594c837d35e0ec4a34f1634ff34038.json",
-      "sha256": "56303cafaddb321c953fe4e00add1a13ba081e1b9791e4a841ca88d588ebff92"
+      "sha256": "3eca337d50960529aef761f033b49a92d1712be82116cec2047e5bc7578cc0f2"
     },
     "5aeed47376ae18aee0c550e58c8efb6e29baa844ae54f6b26da3210df29d5673": {
       "tenant": "operadora-b",
       "file": "5aeed47376ae18aee0c550e58c8efb6e29baa844ae54f6b26da3210df29d5673.json",
-      "sha256": "eb6cc6831ba55b64aae8d351d03d718e0d3fb5d4d366f3dd9d21a4423cedeaa9"
+      "sha256": "defd54c7fc02304cd75e7bbf48d69eddd3a26cb03b34efe18f4fe19658d649ca"
     },
     "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4": {
       "tenant": "operadora-b",
       "file": "5ca84d377cfe6846e75f8909c8e33e6f0151e9ac7eeaa0865025bd4f0501c6d4.json",
-      "sha256": "300d0ff68bf15662e09e59b3023ceb643b98d713d3d2a4f7ad8e0c8613b2bc41"
+      "sha256": "f6f935ff6960416ef0d5003ef2dacc563ef8a05031118180adc028c7abb6d729"
     }
   }
 }

@@ -386,6 +386,7 @@ export class QuakeMap {
 
   startAreaSelection(): void {
     if (this.draft !== null) return;
+    this.map.stop();
     this.draft = [];
     this.doubleClickWasEnabled = this.map.doubleClickZoom.enabled();
     this.map.doubleClickZoom.disable();

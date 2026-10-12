@@ -692,12 +692,14 @@ def write_snapshot(output: Path, snapshot: dict[str, Any], records: dict[str, An
     for cid, record in records.items():
         path = output / f"{cid}.json"
         payload = json.dumps(record, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-        path.write_text(payload + "\n", "utf-8")
+        path.write_text(payload + "\n", "utf-8", newline="\n")
         snapshot["publications"][cid]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
         old_files.discard(path)
     # O índice é gravado depois de todos os arquivos; o próximo export remove arquivos antigos.
     (output / "snapshot.json").write_text(
-        json.dumps(snapshot, ensure_ascii=False, indent=2, allow_nan=False) + "\n", "utf-8"
+        json.dumps(snapshot, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        "utf-8",
+        newline="\n",
     )
     for path in old_files:
         path.unlink()
