@@ -165,6 +165,7 @@ Para gerar a demonstração estática a partir das capturas, consulte [Exportar 
 | [Testes e verificações](docs/progress.md) | Fechamento do M6: 307 testes Python sem skips. Melhoria da interface: 80 testes de frontend, typecheck e build. |
 | [CI de 09/10/2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Cinco jobs concluídos no commit `7564a7c`: Python, frontend, PostGIS, integração e segurança. |
 | [Snapshot REPLAY](web/public/demo/snapshot.json) | Origem, seed, hashes e cenário da página pública. [Regressões do exportador](tests/unit/test_public_demo.py) conferem os valores do exemplo. |
+| [CI da exploração](https://github.com/arthurjoanes/quake-exposure/actions/runs/38197953583) | Commit `cb359c2`: Python, frontend, PostGIS, integração e segurança aprovados. 259 testes locais de unidade/propriedade e 110 da interface; testes da stack executados no CI. |
 
 Para repetir as verificações:
 
