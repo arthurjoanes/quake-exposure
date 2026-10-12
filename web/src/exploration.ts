@@ -36,5 +36,5 @@ export function renderArea(assets: readonly Asset[]): string {
   return `<h3>Área selecionada</h3><p>${count(totals.count)} ativos · ${count(totals.eligible)} elegíveis · ${count(totals.qualifying)} classificados</p>
     <div class="scroll"><table><thead><tr><th>Moeda</th><th>Valor na área</th><th>Valor classificado</th></tr></thead><tbody>
       ${(["BRL", "USD"] as const).map(currency => `<tr><th>${currency}</th><td class="money">${formatMinor(totals.insured[currency], currency)}</td><td class="money">${formatMinor(totals.classified[currency], currency)}</td></tr>`).join("")}
-    </tbody></table></div><p class="muted">A lista mostra os ativos dessa área. O resumo e os gráficos acima continuam representando a publicação inteira.</p>`;
+    </tbody></table></div><p class="sr-only">A lista mostra os ativos dessa área. O resumo e os gráficos gerais representam a publicação inteira.</p>`;
 }

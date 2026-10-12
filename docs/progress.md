@@ -306,3 +306,15 @@ Revisão de 12/10/2026: a execução Linux do CI identificou a importação do e
 Os 12 arquivos do snapshot usam LF em qualquer sistema e seus hashes correspondem aos blobs publicados. No celular a 390 pixels, o mapa manteve a posição entre o primeiro e o quarto vértice; a seleção exibiu 561 ativos, 561 elegíveis e 46 classificados, sem alterar os totais gerais. Sem rolagem horizontal da página. Captura em [ui-exploration-mobile.png](results/ui-exploration-mobile.png). A demonstração foi publicada no [GitHub Pages](https://arthurjoanes.github.io/quake-exposure/).
 
 Fechamento remoto: os cinco jobs da execução `38197953583` concluíram com sucesso, incluindo a integração completa com Kafka, Debezium, exclusão e restauração. O build e deploy REPLAY do commit `cfbd787` também concluíram. Conferidos no endereço público o caso de 46 classificados, os dois resumos da comparação, a consulta regional e os valores por moeda.
+
+## Revisão de UI e UX (2026-10-12)
+
+A página principal concentra mapa, resumo por moeda e quatro gráficos. Ações do mapa usam ícones SVG, rótulos curtos e nomes acessíveis. Critério, origem dos dados, revisões, instruções e operação ficam em detalhes recolhíveis. A navegação abre Operação; a demonstração identifica REPLAY e a data do snapshot no cabeçalho. Os filtros públicos mostram as duas escolhas disponíveis: carteira e terremoto.
+
+Área e comparação aparecem antes dos gráficos. A comparação pode ser fechada durante a consulta ou após uma falha, com nova tentativa na página correspondente. Falhas de operação e fontes não bloqueiam a análise. A ação da lista abre os detalhes do ativo mesmo fora do enquadramento; o marcador sai ao trocar a publicação ou selecionar uma área que não o contém. Exclusão também descarta o HTML do resumo da área.
+
+Busca, situação, moeda, tamanho e página da lista ficam na URL, junto da seleção e da comparação aberta. Os filtros persistem ao ajustar a área ou atualizar a mesma seleção. Uma troca de carteira, evento, escopo ou critério limpa os resultados anteriores.
+
+Validação local: 129 testes da interface, TypeScript strict e builds da aplicação e do REPLAY passaram. No navegador, conferidos restauração da página 2 com 100 linhas, busca, vazio com limpeza, comparação, foco e consulta de ativo fora do mapa. Falhas HTTP 500 foram injetadas em um servidor local com fixtures: análise e comparação recuperaram após nova tentativa; falha persistente de operação manteve os 5.000 ativos e o resumo de 46 classificados e 1.972 elegíveis.
+
+No celular a 390 pixels, o mapa manteve a posição do primeiro ao quarto vértice. A área selecionou 1.903 ativos, 1.890 elegíveis e 46 classificados; mover um vértice pelo teclado reduziu o recorte a 1.902 ativos e preservou os filtros. Os totais gerais permaneceram iguais. Sem rolagem horizontal em 320 e 390 pixels. Capturas: [desktop](results/ui-ux-desktop.jpg), [comparação](results/ui-ux-comparison.jpg) e [celular](results/ui-ux-mobile.jpg). README e guias atualizados.

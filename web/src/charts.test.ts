@@ -133,7 +133,7 @@ describe("renderCharts", () => {
     pub.result.qualifying_count = 0;
     pub.result.qualifying_value_minor = { BRL: "0", USD: "0" };
     const html = renderCharts(pub, assets, diff);
-    expect(html).toContain("de 0 ativos classificados");
+    expect(html).toContain("classificados de 0 ativos");
     expect(html).toContain("R$ 0,00");
     expect(html).not.toContain("indisponíveis");
     expect(html).not.toContain("NaN");
@@ -207,5 +207,26 @@ describe("renderCharts", () => {
     const before = JSON.stringify(data);
     renderCharts(data.pub, data.assets, data.diff);
     expect(JSON.stringify(data)).toBe(before);
+  });
+
+  it("recolhe explicações mantendo os gráficos, legendas e valores visíveis", () => {
+    const { pub, assets, diff } = fixture();
+    const html = renderCharts(pub, assets, diff);
+    const explanations = html.match(/<details class="chart-details">[\s\S]*?<\/details>/g) ?? [];
+    expect(html.match(/class="chart-panel"/g)).toHaveLength(4);
+    expect(explanations).toHaveLength(4);
+    for (const explanation of explanations) {
+      expect(explanation).toContain("<summary>Sobre o gráfico</summary>");
+      expect(explanation).not.toContain("<svg");
+      expect(explanation).not.toContain("chart-legend");
+      expect(explanation).not.toContain("chart-number");
+      expect(explanation).not.toContain("chart-money-row");
+    }
+    const visible = html.replace(/<details class="chart-details">[\s\S]*?<\/details>/g, "");
+    expect(visible).toContain("R$ 90.071.992.547.409,93");
+    expect(visible).toContain("R$ 90.071.992.547.410,00");
+    expect(visible).toContain("2 com MMI · 1 sem amostra elegível");
+    expect(visible).toContain('class="chart-legend"');
+    expect(visible.match(/<svg/g)).toHaveLength(3);
   });
 });

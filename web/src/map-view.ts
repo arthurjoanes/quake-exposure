@@ -30,10 +30,11 @@ const magnitude = (mag: number | null): string => mag === null ? "–" : mag.toF
 const eventLabel = (event: QuakeEvent): string =>
   `${event.preferred_id} · M ${magnitude(event.mag)} · ${event.event_time.slice(0, 19).replace("T", " ")} UTC`
   + (event.lifecycle === "RETRACTED" ? " · retirado" : "");
-const assetLabel = (asset: Asset): string =>
-  `${asset.asset_id} · ${formatMinor(asset.insured_value_minor, asset.currency)}`
+const assetDescription = (asset: Asset): string =>
+  `${formatMinor(asset.insured_value_minor, asset.currency)}`
   + (asset.mmi === null ? "" : ` · MMI ${asset.mmi.toFixed(2).replace(".", ",")}`)
   + ` · ${asset.qualifying ? "classificado" : asset.eligible ? "elegível" : "não elegível"}`;
+const assetLabel = (asset: Asset): string => `${asset.asset_id} · ${assetDescription(asset)}`;
 
 interface EventMarker { signature: string; event: QuakeEvent; marker: L.CircleMarker }
 interface AssetMarker { group: AssetGroup; marker: L.CircleMarker }
@@ -58,6 +59,8 @@ export class QuakeMap {
   private readonly resize: ResizeObserver;
   private readonly animate: boolean;
   private assetMarkers: AssetMarker[] = [];
+  private focusedAsset: { asset: Asset; marker: L.CircleMarker } | null = null;
+  private assetPublication = "";
   private regionalMarkers: RegionalMarker[] = [];
   private region: RegionResponse | null = null;
   private regionSignature = "";
@@ -244,6 +247,10 @@ export class QuakeMap {
   }
 
   setAssets(assets: readonly Asset[], publicationId: string, mode: Mode, event?: QuakeEvent): void {
+    const publication = publicationId.split(":region:")[0].split("|")[0];
+    if (publication !== this.assetPublication) this.clearFocusedAsset();
+    if (publicationId.includes("|") && this.focusedAsset && !assets.some(asset => asset.asset_id === this.focusedAsset!.asset.asset_id)) this.clearFocusedAsset();
+    this.assetPublication = publication;
     this.region = null;
     this.regionSignature = "";
     this.renderedRegion = "";
@@ -322,6 +329,7 @@ export class QuakeMap {
     for (const { event, marker } of this.events.values()) this.wrapMarker(marker, event.lat, event.lon, center);
     for (const { group, marker } of this.assetMarkers) this.wrapMarker(marker, group.lat, group.lon, center);
     for (const { cluster, marker } of this.regionalMarkers) this.wrapMarker(marker, cluster.lat, cluster.lon, center);
+    if (this.focusedAsset) this.wrapMarker(this.focusedAsset.marker, this.focusedAsset.asset.lat, this.focusedAsset.asset.lon, center);
     for (const { asset, anchor, marker } of this.comparisonMarkers) this.wrapMarker(marker, asset.lat, asset.lon, near(anchor, center));
     for (const { before, after, line } of this.comparisonLines) {
       const first = near(before.lon, center);
@@ -593,18 +601,30 @@ export class QuakeMap {
     if (marker.getLatLng().lng !== wrapped) marker.setLatLng([lat, wrapped]);
   }
 
-  focusEvent(event: QuakeEvent): void {
+  focusEvent(event: QuakeEvent, animate = this.animate): void {
     this.map.flyTo([event.lat, near(event.lon, this.map.getCenter().lng)], Math.max(7, Math.min(10, this.map.getZoom())), {
-      animate: this.animate, duration: 0.6,
+      animate, duration: 0.6,
     });
   }
 
   focusAsset(asset: Asset): void {
+    if (this.draft !== null) return;
+    this.clearFocusedAsset();
     this.map.setView([asset.lat, near(asset.lon, this.map.getCenter().lng)], Math.max(12, this.map.getZoom()), {
       animate: false,
     });
-    this.drawAssets();
-    this.assetMarkers.find(({ group }) => group.assets.length === 1 && group.assets[0].asset_id === asset.asset_id)?.marker.openTooltip();
+    const color = asset.qualifying ? this.colors.qualifying : asset.eligible ? this.colors.eligible : this.colors.other;
+    const marker = L.circleMarker([asset.lat, near(asset.lon, this.map.getCenter().lng)], {
+      renderer: this.comparisonRenderer, radius: 9, color: "#14344b", weight: 2,
+      fillColor: color, fillOpacity: 1,
+    }).bindPopup(`<strong>${esc(asset.asset_id)}</strong><p>${esc(assetDescription(asset))}</p>`).addTo(this.map);
+    this.focusedAsset = { asset, marker };
+    marker.openPopup();
+  }
+
+  private clearFocusedAsset(): void {
+    this.focusedAsset?.marker.remove();
+    this.focusedAsset = null;
   }
 
   fitAssets(assets: readonly Asset[] = this.assets): void {
@@ -619,6 +639,8 @@ export class QuakeMap {
   }
 
   clearAssets(): void {
+    this.clearFocusedAsset();
+    this.assetPublication = "";
     this.assets = [];
     this.selectedEvent = undefined;
     this.assetMarkers = [];

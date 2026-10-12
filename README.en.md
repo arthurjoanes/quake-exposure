@@ -33,18 +33,31 @@ The criteria select assets for inspection. Amounts represent the classified port
 
 ## Demo
 
-![QuakeExposure dashboard with geographic selection and currency totals](docs/results/ui-exploration.png)
+![QuakeExposure dashboard with map, filters and currency totals](docs/results/ui-ux-desktop.jpg)
 
-The [online demo](https://arthurjoanes.github.io/quake-exposure/) runs in the browser with REPLAY captures and 10,000 fictional assets. Select an area to draw a polygon; its assets appear in the list, with amounts by currency. Map comparison shows previous and current positions alongside both publication summaries.
+The [online demo](https://arthurjoanes.github.io/quake-exposure/) runs in the browser with REPLAY captures and 10,000 fictional assets. Section navigation leads to the map, charts, assets and operations. Filters are collapsed on mobile. Select an area to draw a polygon; its assets appear in the list, with amounts by currency.
+
+Publication comparison shows previous and current positions, summaries and changes by currency. It covers the entire portfolio; the area result keeps its own context. The map action frames changed assets. Criteria, revisions and operations are available through expandable controls.
 
 In the initial example, a retroactive correction moves `ope-00001` to a point with MMI 6.7. Classified assets increase from 45 to 46, and the USD amount rises from USD 5,147,876.70 to USD 5,164,008.33. The asset is worth USD 16,131.63; BRL remains BRL 864,346.66. The grid is an original capture; the correction belongs to the fictional portfolio.
 
 The snapshot from October 11, 2026, 23:42 São Paulo time was calculated by the domain code from versioned captures. The public page offers MMI and identifies that CDC was not executed for this example. The local environment also offers the 100 km radius criterion and actual processing status. [Data and provenance](web/public/demo/snapshot.json) · [Exploration guide](docs/exploracao.md), in Portuguese.
 
 <details>
-<summary>View comparison, operations and earlier captures</summary>
+<summary>View comparison and the mobile interface</summary>
 
-![Position, classification and amount comparison between publications](docs/results/ui-comparison.png)
+![Comparison with positions and previous, current and changed amounts by currency](docs/results/ui-ux-comparison.jpg)
+
+[Mobile interface](docs/results/ui-ux-mobile.jpg)
+
+</details>
+
+Interface captures from October 12, 2026, using the snapshot described above.
+
+<details>
+<summary>View operations and earlier captures</summary>
+
+[Area selection in the earlier presentation](docs/results/ui-exploration.png) · [Earlier comparison](docs/results/ui-comparison.png)
 
 ![Portfolio, CDC, calculation and result flow](docs/results/ui-operations.png)
 
@@ -58,7 +71,7 @@ The snapshot from October 11, 2026, 23:42 São Paulo time was calculated by the 
 
 </details>
 
-The chart, asset-list and mobile captures above are from October 9, 2026. That local run erased one asset; Operadora B contained 4,999 after an initial load of 5,000. The online snapshot uses a separate load and a portfolio correction, without executing erasure.
+The `ui-map-charts.png`, `ui-assets.png` and `ui-mobile-charts.png` captures are from October 9, 2026. That local run erased one asset; Operadora B contained 4,999 after an initial load of 5,000. The online snapshot uses a separate load and a portfolio correction, without executing erasure.
 
 In the [run recorded on October 9, 2026](docs/results/verify-demo.json), event `us7000tiur`, portfolio Operadora B, and criterion MMI ≥ 6.0 produced:
 
@@ -74,8 +87,10 @@ To explore the dashboard:
 1. Select REPLAY, Operadora B, `us7000tiur`, and the MMI criterion. Inspect portfolio composition, amounts by currency, and intensity distribution in the charts.
 2. Filter the asset list by classified status and currency. Search for an ID or locate an asset on the map. Pages contain 50 or 100 rows; list filters do not change chart totals.
 3. Draw an area on the map. Drag its vertices to adjust it or clear the area to restore the entire portfolio. Area results remain separate from the global summary.
-4. Compare on the map to inspect the previous publication, positions and classification changes. Changes are paginated.
-5. Open operations to inspect portfolio, CDC, queues and publications. In the public demo, this section explains the snapshot calculation. Scope, portfolio, event, and criterion are stored in the URL.
+4. Open publication comparison to inspect the previous publication, positions and classification changes across the entire portfolio. Changes are paginated; the map action frames the assets on the current page.
+5. Open operations from the navigation to inspect portfolio, CDC, queues and publications. In the public demo, this section explains the snapshot calculation.
+
+The URL stores the analysis selection, asset search, status, currency and pagination. Reloading restores these filters and reopens the comparison when it was open. Drawn areas are not stored. Failed queries offer a retry action; the comparison can be closed while loading.
 
 The map uses OpenStreetMap streets and places, with point clustering at lower zoom levels. The offline alternative includes Natural Earth countries and coastlines at 1:50 million scale. Online tiles require internet access; portfolio data comes from the local API. A missing ShakeMap appears as unavailable, without assigning zero intensity to assets. The application interface is in Brazilian Portuguese.
 
@@ -166,6 +181,7 @@ To generate the static demo from captures, see [Export the demo](docs/operacao.m
 | [CI on October 9, 2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Five jobs completed at commit `7564a7c`: Python, frontend, PostGIS, integration, and security. |
 | [REPLAY snapshot](web/public/demo/snapshot.json) | Sources, seed, hashes and public-page scenario. [Exporter regressions](tests/unit/test_public_demo.py) check the example amounts. |
 | [Exploration CI](https://github.com/arthurjoanes/quake-exposure/actions/runs/38197953583) | Commit `cb359c2`: Python, frontend, PostGIS, integration and security passed. 259 local unit/property tests and 110 frontend tests; stack tests executed in CI. |
+| [UI/UX revision](docs/progress.md) | 129 frontend tests executed locally on October 12, 2026, including navigation state, comparison, operations and asset-list filters. |
 
 To repeat the checks:
 

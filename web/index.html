@@ -9,50 +9,57 @@
     <title>QuakeExposure — exposição de carteiras a terremotos</title>
   </head>
   <body>
+    <a class="skip-link" href="#analysis">Ir para a análise</a>
     <header class="app-header">
       <div class="brand"><img class="brand-mark" src="%BASE_URL%brand/quake-exposure-mark.svg" width="48" height="48" alt="" /><div><h1>QuakeExposure</h1><p>Exposição de carteiras a terremotos</p></div></div>
-      <div class="header-state"><span class="dataset-note">Carteira fictícia</span><span id="clock" role="status"></span></div>
+      <nav class="section-nav" aria-label="Seções do painel"><a href="#map-wrap">Mapa</a><a href="#charts-section">Gráficos</a><a href="#assets">Ativos</a><a href="#operations">Operação</a></nav>
+      <div class="header-state"><details class="dataset-details"><summary id="dataset-label" class="dataset-note">Carteira fictícia</summary><p>Terremotos e ShakeMap do USGS. Os ativos e valores da carteira são fictícios.</p></details><span id="clock"></span></div>
     </header>
-    <nav class="filters" aria-label="Filtros da análise">
-      <label>Escopo
-        <select id="scope">
+    <details id="analysis-filters" class="filters-panel" open>
+      <summary class="filter-disclosure">Filtros da análise <span id="filter-selection"></span></summary>
+      <div class="filters" role="group" aria-label="Filtros da análise">
+      <label for="scope" class="scope-filter">Escopo
+        <select id="scope" name="scope">
           <option value="LIVE">LIVE</option>
           <option value="REPLAY" selected>REPLAY</option>
           <option value="FAULT">FAULT</option>
         </select>
       </label>
-      <label>Carteira <select id="tenant"></select></label>
-      <label class="event-filter">Terremoto <select id="event"></select></label>
-      <label>Critério
-        <select id="mode">
+      <label for="tenant">Carteira <select id="tenant" name="tenant"></select></label>
+      <label for="event" class="event-filter">Terremoto <select id="event" name="event"></select></label>
+      <label for="mode" class="mode-filter">Critério
+        <select id="mode" name="mode">
           <option value="RADIUS_TRIAGE">Raio de 100 km</option>
           <option value="SHAKEMAP_MMI">Intensidade MMI ≥ 6,0</option>
         </select>
       </label>
-    </nav>
-    <div id="scope-note" class="strip" hidden></div>
-    <div id="stale" class="strip" hidden></div>
-    <div id="demo-note" class="strip demo-note" hidden></div>
-    <main>
-      <section class="exploration-guide" aria-label="Percurso da análise"><div><h2>Consultar uma mudança</h2><p>Escolha a carteira e o terremoto. Selecione uma área, confira os ativos e compare a publicação com a anterior.</p></div><nav aria-label="Seções do painel"><a href="#map-wrap">Mapa</a><a href="#assets">Ativos</a><a href="#operations">Operação</a></nav></section>
+      </div>
+    </details>
+    <main id="analysis" tabindex="-1">
+      <div id="scope-note" class="context-note" hidden></div>
+      <div id="stale" class="strip" role="status" hidden></div>
+      <div id="app-feedback" class="app-feedback" role="status" aria-live="polite" hidden><p id="feedback-message"></p><button id="retry-analysis" type="button" hidden>Tentar novamente</button></div>
+      <span id="analysis-announcement" class="sr-only" role="status" aria-live="polite"></span>
       <div class="analysis-view">
-      <div id="map-wrap">
-        <div class="map-heading"><div><h2>Visão geográfica</h2><span id="map-density" class="muted">Selecione um terremoto para analisar a carteira.</span></div><div class="map-actions"><button id="focus-event" type="button" disabled>Centralizar evento</button><button id="fit-assets" type="button" disabled>Ver carteira</button></div></div>
-        <div class="area-controls"><button id="draw-area" type="button" disabled>Selecionar área</button><button id="finish-area" type="button" hidden disabled>Concluir área</button><button id="undo-area" type="button" hidden disabled>Desfazer ponto</button><button id="cancel-area" type="button" hidden>Cancelar</button><button id="clear-area" type="button" hidden>Limpar área</button><button id="compare-map" type="button" disabled aria-pressed="false">Comparar no mapa</button><span id="area-status" role="status">Selecione uma área para consultar seus ativos.</span></div>
+      <section id="map-wrap" aria-label="Mapa de exposição">
+        <div class="map-heading"><div><h2>Mapa</h2><span id="map-density" class="muted">Escolha um terremoto</span></div><div class="map-actions"><button id="focus-event" type="button" title="Centralizar terremoto" aria-label="Centralizar terremoto" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg><span>Evento</span></button><button id="fit-assets" type="button" title="Ver carteira no mapa" aria-label="Ver carteira no mapa" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></svg><span data-label>Carteira</span></button></div></div>
+        <div class="area-controls"><div class="area-actions"><button id="draw-area" class="primary-button" type="button" title="Selecionar área" aria-label="Selecionar área" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14-1 2 14-15 3Z"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="4" r="2"/><circle cx="21" cy="18" r="2"/><circle cx="6" cy="21" r="2"/></svg><span data-label>Área</span></button><button id="finish-area" class="primary-button" type="button" hidden disabled aria-label="Concluir área">Concluir</button><button id="undo-area" type="button" hidden disabled aria-label="Desfazer último ponto">Desfazer</button><button id="cancel-area" type="button" hidden>Cancelar</button><button id="clear-area" type="button" hidden aria-label="Limpar área" title="Limpar área">Limpar</button><button id="compare-map" type="button" title="Comparar publicações" aria-label="Comparar publicações" disabled aria-pressed="false" aria-controls="comparison"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6v14H4zM14 5h6v14h-6zM12 2v20"/></svg><span>Comparar</span></button></div><span id="area-status" role="status" hidden></span></div>
         <div id="map" aria-label="Mapa de terremotos e ativos da carteira"></div>
         <div class="legend">
           <span><i class="dot q"></i>Classificado</span>
-          <span><i class="dot e"></i>Elegível, não classificado</span>
+          <span><i class="dot e"></i>Outros elegíveis</span>
           <span><i class="dot n"></i>Não elegível</span>
           <span><i class="dot ev"></i>Terremoto</span>
         </div>
+        <details class="map-help"><summary>Como usar</summary><p>Amplie os grupos para separar os ativos. Para recortar a carteira, escolha Área, marque pelo menos três pontos e conclua. Arraste os vértices para ajustar.</p><p>Com o mapa em foco: Espaço marca o centro, Enter conclui, Backspace desfaz e Escape cancela. Nos vértices, use as setas para ajustar; Shift aumenta o deslocamento.</p></details>
+        <button id="retry-region" class="region-retry" type="button" hidden>Tentar consultar esta região novamente</button>
         <p id="map-base-status" class="map-base-status" role="status"></p>
-      </div>
+      </section>
       <section id="summary" aria-label="Resumo da publicação"></section>
       </div>
-      <section id="charts" aria-label="Gráficos de exposição"></section>
       <section id="area-summary" class="area-summary" aria-label="Resultado da área selecionada" hidden></section>
-      <section id="comparison" class="comparison-panel" aria-label="Comparação entre publicações" hidden></section>
+      <section id="comparison" class="comparison-panel" tabindex="-1" aria-label="Comparação entre publicações" hidden></section>
+      <section id="charts-section" class="chart-section" aria-label="Gráficos de exposição"><div class="section-heading"><h2>Distribuição</h2><span class="section-scope">Carteira inteira</span></div><div id="charts"></div></section>
       <div class="details-grid">
         <section id="assets"></section>
         <aside class="context-panels">
@@ -60,7 +67,7 @@
         <section id="diff"></section>
         </aside>
       </div>
-      <section id="operations" class="operations-panel" aria-label="Estado do processamento"><h2>Operação da carteira</h2><p class="muted">Consultando o estado do processamento.</p></section>
+      <details id="operations-disclosure" class="operations-disclosure"><summary>Operação <span>Carteira, atualizações e publicações</span></summary><section id="operations" class="operations-panel" aria-label="Estado do processamento"><h2>Operação da carteira</h2><p class="muted">Consultando o estado do processamento.</p></section></details>
     </main>
     <footer><span>Terremotos e ShakeMap: USGS. Carteira fictícia. Valores separados por moeda.</span><span>Mapa: OpenStreetMap / Natural Earth.</span></footer>
     <script type="module" src="/src/main.ts"></script>
