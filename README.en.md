@@ -165,6 +165,7 @@ To generate the static demo from captures, see [Export the demo](docs/operacao.m
 | [Tests and checks](docs/progress.md) | M6 completion: 307 Python tests with no skips. Frontend update: 80 frontend tests, typecheck, and build. |
 | [CI on October 9, 2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Five jobs completed at commit `7564a7c`: Python, frontend, PostGIS, integration, and security. |
 | [REPLAY snapshot](web/public/demo/snapshot.json) | Sources, seed, hashes and public-page scenario. [Exporter regressions](tests/unit/test_public_demo.py) check the example amounts. |
+| [Exploration CI](https://github.com/arthurjoanes/quake-exposure/actions/runs/38197953583) | Commit `cb359c2`: Python, frontend, PostGIS, integration and security passed. 259 local unit/property tests and 110 frontend tests; stack tests executed in CI. |
 
 To repeat the checks:
 
