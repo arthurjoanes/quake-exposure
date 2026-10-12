@@ -46,7 +46,7 @@ Não há Makefile. Comando novo entra como `uv run qe ...` ou `docker compose ..
 - Stack: Python com uv, httpx, psycopg 3, jsonschema, defusedxml, FastAPI, confluent-kafka (CDC), pytest, Hypothesis e geographiclib (só oráculo de teste); Ruff e mypy strict; PostgreSQL + PostGIS, Kafka KRaft e Kafka Connect com Debezium PostgreSQL; frontend TypeScript strict + Vite + Leaflet com npm. Versões fixadas em lockfile e por tag de imagem, nunca `latest`. Ferramenta fora dessa lista só com ADR aceito em `docs/adr/`.
 - Texto de README, docs e interface: pt-BR, curto e seco. Sem "evidência", "prova", "ensaio", "atestar", "assegurar", negrito no meio de parágrafo, slogan ou aviso defensivo. Código e identificadores em inglês.
 - `docs/progress.md` traz o estado real de cada milestone.
-- Mensagens de commit registram a mudança e seus autores humanos. Manter a redação direta da documentação e os créditos das bibliotecas e fontes.
+- Mensagens de commit registram a mudança e a autoria. Manter a redação direta da documentação e os créditos das bibliotecas e fontes.
 
 ## Domínio
 
