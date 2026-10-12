@@ -54,6 +54,8 @@ O snapshot de 11/10/2026, 23:42 em São Paulo, foi calculado pelo domínio a par
 
 [Gráficos no celular](docs/results/ui-mobile-charts.png)
 
+[Seleção por área no celular](docs/results/ui-exploration-mobile.png)
+
 </details>
 
 As capturas de gráficos, listas e celular acima são de 09/10/2026. Naquela execução local, a demo excluiu um ativo; a Operadora B ficou com 4.999, após uma carga inicial de 5.000 nessa carteira. O snapshot online usa uma carga própria e uma correção da carteira, sem executar exclusão.
