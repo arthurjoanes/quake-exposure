@@ -188,7 +188,7 @@ def test_comparison_reports_positions_classification_and_paginated_changes(
     assert moved["before"]["insured_value_minor"] == str(large)
     assert body["before"]["result"]["input_vector"]["portfolio_epoch"] == 1
     assert body["after"]["result"]["input_vector"]["portfolio_epoch"] == 2
-    assert body["before"]["result"]["qualifying_value_minor"] == {"BRL": str(large)}
+    assert body["before"]["result"]["qualifying_value_minor"] == {"BRL": str(large), "USD": "0"}
     second = api.get(
         f"/api/publications/{after}/comparison", params={"tenant": "t1", "limit": 1, "offset": 1}
     ).json()

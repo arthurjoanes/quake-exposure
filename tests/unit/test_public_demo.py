@@ -88,14 +88,17 @@ def test_public_files_contain_only_replay_and_no_identity_contact_or_cdc_payload
     snapshot = json.loads(json.dumps(snapshot))
     write_snapshot(tmp_path, snapshot, records)
     for filename in tmp_path.glob("*.json"):
+        raw = filename.read_bytes()
+        assert b"\r" not in raw
+        assert raw.endswith(b"\n")
         content = filename.read_text("utf-8")
         for private_key in ("subject_token", "contact", "cdc_stage", "payload", "password"):
             assert f'"{private_key}"' not in content
         assert '"LIVE"' not in content
         assert '"FAULT"' not in content
     for entry in snapshot["publications"].values():
-        assert (
-            hashlib.sha256((tmp_path / entry["file"]).read_bytes()).hexdigest() == entry["sha256"]
-        )
+        raw = (tmp_path / entry["file"]).read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == entry["sha256"]
+        assert hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest() == entry["sha256"]
     assert len(snapshot["current"]) == 4
     assert len(records) == 12
