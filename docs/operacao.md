@@ -171,6 +171,46 @@ O comando abaixo baixa esses arquivos pelo cliente de coleta e confere seus hash
 uv run python scripts/fetch_fixtures.py pull
 ```
 
+## Exportar a demonstração
+
+O exportador grava somente fatos públicos no escopo REPLAY. A geração por fixtures
+usa o domínio, a carteira fictícia de seed 42 e os grids originais já versionados.
+Inclui uma correção retroativa da carteira para mostrar entrada na classificação.
+
+```bash
+git rev-parse HEAD
+uv run python scripts/export_demo.py --commit <sha-40>
+```
+
+O comando grava `web/public/demo/snapshot.json` e os arquivos de cada resultado.
+O índice inclui origem, hashes, modos disponíveis e data. A geração por fixtures
+oferece MMI e informa `pipeline_executed: false`. Não consulta o USGS.
+
+Com a API local atualizada, uma exportação do estado observado pode incluir ambos
+os critérios:
+
+```bash
+uv run python scripts/export_demo.py --commit <sha-40> --api-base http://127.0.0.1:8000
+```
+
+A exportação da API conserva apenas REPLAY. O cenário comparável depende das
+publicações existentes e das guardas de privacidade. Nenhum payload CDC ou contato
+é incluído nos arquivos públicos.
+
+Para conferir o build estático no PowerShell:
+
+```powershell
+cd web
+$env:VITE_DEMO = '1'
+npm run build
+Remove-Item Env:\VITE_DEMO
+npm exec vite preview -- --host 127.0.0.1 --port 4173
+```
+
+O workflow `pages.yaml` publica a demonstração após alterações em `web/` no branch
+`main`. O CI valida a aplicação completa em paralelo. O guia dos controles fica em
+[exploracao.md](exploracao.md).
+
 ## Testes e verificações
 
 ```bash

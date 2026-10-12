@@ -214,7 +214,7 @@ RAM por `docker stats`, durante a demo: plataforma 354,30 MiB; origem 58,30 MiB;
 
 O primeiro bootstrap excedeu 180 s com commit Kafka por mensagem. Após agrupar confirmações, o consumidor drenou cerca de 500 linhas a cada 3 s; a retomada verificou o seed completo e terminou sem semear novamente. A medição a frio fica no M6.
 
-A stack nova usa o projeto Compose `quake-exposure-v03`; os volumes da v0.1 foram preservados. Pendência externa: push depende do Arthur.
+A stack usa o projeto Compose `quake-exposure-v03`; os volumes da v0.1 foram preservados.
 
 ## M5: exclusão, backfill e v0.3 (2026-10-09)
 
@@ -253,11 +253,11 @@ Commits locais desta continuação: `e4aaa1c` (CDC, tag v0.2), `bb230de` (exclus
 
 A instância entregue está em `http://127.0.0.1:8000`, projeto Compose `quake-exposure-v03`, com os bancos, Kafka, Connect, CDC, worker e API. O coletor não foi iniciado. Ao fechar a verificação: zero transações CDC pendentes, zero cálculos pendentes/com lease/esgotados e zero quarentenas. Os volumes da v0.1 foram preservados; os projetos temporários de teste e medição são removidos ao terminar.
 
-Pendência externa: criar o repositório remoto e autorizar o push dos commits e tags. O CI está configurado; nenhuma execução no GitHub foi feita. Nenhuma requisição ao USGS nesta continuação. Nenhuma nova decisão de escopo.
+No fechamento local do M6, o repositório remoto ainda não existia. Os commits, tags e CI foram publicados em 09/10/2026, conforme o registro abaixo.
 
 ## Interface, identidade visual e apresentação (2026-10-09)
 
-Implementação e validação local concluídas. Repositório público criado em `arthurjoanes/quake-exposure`, com descrição, tópicos e destino dos commits configurado. A pendência de autorização no fechamento do M6 acima registra o estado daquela entrega; o pedido posterior do Arthur inclui finalizar a apresentação no Git.
+Repositório público criado em `arthurjoanes/quake-exposure`, com descrição, tópicos, commits e tags publicados.
 
 - Marca própria em SVG: símbolo Q com ondas concêntricas, logotipo horizontal e banner de apresentação. A paleta usa azul profundo, verde-petróleo e coral; os mesmos significados de cor aparecem no mapa, nos gráficos e na legenda. Arquivos em `web/public/brand/` e `docs/assets/banner.svg`.
 - Mapa online com ruas e localidades do OpenStreetMap; base offline Natural Earth com países e costa em 1:50 milhões. Agrupamento por zoom, cache por publicação, eventos persistentes e desenho em Canvas reduzem a reconstrução de camadas. O mapa continua tratando o antimeridiano.
@@ -286,3 +286,17 @@ CI remoto da implementação anterior confirmado: [execução 38004551496](https
 ## Guia de desenvolvimento (2026-10-11)
 
 As regras de desenvolvimento e manutenção estão em [CONTRIBUTING.md](../CONTRIBUTING.md). Os dois READMEs e o padrão documental apontam para esse guia. Código, testes, capturas e resultados das execuções foram preservados; esta revisão não altera o funcionamento da aplicação.
+
+## Exploração geográfica, comparação e demonstração (2026-10-11)
+
+Área por polígono com edição dos vértices e controles de teclado. O resultado da área conserva moedas em inteiros e filtra a lista, mantendo o resumo global identificado. A seleção trata a borda, a projeção do mapa e o antimeridiano.
+
+Consulta regional por publicação e zoom, com pontos ou agregações de contagens e valores. A interface pede até 1.200 elementos; a API aceita até 2.000. Novo índice em `0007_regional_facts.sql`. As listas e gráficos continuam lendo o conjunto completo de fatos.
+
+Comparação paginada de posições, classificação e valores, com causas e resumos anterior/atual. A API mantém tenant e lock de privacidade; uma publicação anterior invalidada não devolve posições ou valores. O painel de operação mostra estados existentes do CDC, filas por carteira, epochs e datas persistidas.
+
+Demonstração estática REPLAY gerada a partir das fixtures originais e da carteira seed 42. A correção retroativa de `ope-00001` aumenta os classificados de 45 para 46 e USD de `514787670` para `516400833` centavos. A página oferece MMI e identifica o CDC não executado nesse snapshot. O critério de raio e o fluxo CDC completo permanecem na stack local. O exportador também aceita uma API local para registrar os dois critérios.
+
+Validação local: Ruff, formatação e mypy passaram; 259 testes Python de unidade/propriedade e 110 testes da interface passaram. Builds local e estático concluíram. No navegador, uma área com quatro vértices selecionou 1.952 ativos, 1.934 elegíveis e 46 classificados, mantendo os totais gerais de 1.972 elegíveis e 46 classificados. Conferidas edição, limpeza, comparação e navegação das listas. A verificação por teclado selecionou 225 ativos e 8 classificados; a edição de um vértice passou para 218 e 7, e Esc preservou a seleção anterior.
+
+Os testes PostGIS e da stack completa ficam no CI. O Docker local não iniciou nesta sessão. Fontes das melhorias em [referencias.md](referencias.md), uso em [exploracao.md](exploracao.md), decisões no [ADR 0005](adr/0005-exploracao-e-demo.md) e exportação no [runbook](operacao.md#exportar-a-demonstração).

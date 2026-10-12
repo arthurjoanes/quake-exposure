@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Exposição de carteiras a terremotos: mapa, intensidade MMI, valores por moeda e histórico de classificação." />
     <meta name="theme-color" content="#14344b" />
-    <link rel="icon" type="image/svg+xml" href="/brand/quake-exposure-mark.svg" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%brand/quake-exposure-mark.svg" />
     <title>QuakeExposure — exposição de carteiras a terremotos</title>
   </head>
   <body>
     <header class="app-header">
-      <div class="brand"><img class="brand-mark" src="/brand/quake-exposure-mark.svg" width="48" height="48" alt="" /><div><h1>QuakeExposure</h1><p>Exposição de carteiras a terremotos</p></div></div>
+      <div class="brand"><img class="brand-mark" src="%BASE_URL%brand/quake-exposure-mark.svg" width="48" height="48" alt="" /><div><h1>QuakeExposure</h1><p>Exposição de carteiras a terremotos</p></div></div>
       <div class="header-state"><span class="dataset-note">Carteira fictícia</span><span id="clock" role="status"></span></div>
     </header>
     <nav class="filters" aria-label="Filtros da análise">
@@ -32,10 +32,13 @@
     </nav>
     <div id="scope-note" class="strip" hidden></div>
     <div id="stale" class="strip" hidden></div>
+    <div id="demo-note" class="strip demo-note" hidden></div>
     <main>
+      <section class="exploration-guide" aria-label="Percurso da análise"><div><h2>Consultar uma mudança</h2><p>Escolha a carteira e o terremoto. Selecione uma área, confira os ativos e compare a publicação com a anterior.</p></div><nav aria-label="Seções do painel"><a href="#map-wrap">Mapa</a><a href="#assets">Ativos</a><a href="#operations">Operação</a></nav></section>
       <div class="analysis-view">
       <div id="map-wrap">
         <div class="map-heading"><div><h2>Visão geográfica</h2><span id="map-density" class="muted">Selecione um terremoto para analisar a carteira.</span></div><div class="map-actions"><button id="focus-event" type="button" disabled>Centralizar evento</button><button id="fit-assets" type="button" disabled>Ver carteira</button></div></div>
+        <div class="area-controls"><button id="draw-area" type="button" disabled>Selecionar área</button><button id="finish-area" type="button" hidden disabled>Concluir área</button><button id="undo-area" type="button" hidden disabled>Desfazer ponto</button><button id="cancel-area" type="button" hidden>Cancelar</button><button id="clear-area" type="button" hidden>Limpar área</button><button id="compare-map" type="button" disabled aria-pressed="false">Comparar no mapa</button><span id="area-status" role="status">Selecione uma área para consultar seus ativos.</span></div>
         <div id="map" aria-label="Mapa de terremotos e ativos da carteira"></div>
         <div class="legend">
           <span><i class="dot q"></i>Classificado</span>
@@ -48,6 +51,8 @@
       <section id="summary" aria-label="Resumo da publicação"></section>
       </div>
       <section id="charts" aria-label="Gráficos de exposição"></section>
+      <section id="area-summary" class="area-summary" aria-label="Resultado da área selecionada" hidden></section>
+      <section id="comparison" class="comparison-panel" aria-label="Comparação entre publicações" hidden></section>
       <div class="details-grid">
         <section id="assets"></section>
         <aside class="context-panels">
@@ -55,6 +60,7 @@
         <section id="diff"></section>
         </aside>
       </div>
+      <section id="operations" class="operations-panel" aria-label="Estado do processamento"><h2>Operação da carteira</h2><p class="muted">Consultando o estado do processamento.</p></section>
     </main>
     <footer><span>Terremotos e ShakeMap: USGS. Carteira fictícia. Valores separados por moeda.</span><span>Mapa: OpenStreetMap / Natural Earth.</span></footer>
     <script type="module" src="/src/main.ts"></script>

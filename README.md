@@ -4,7 +4,7 @@
 
 # QuakeExposure
 
-Triagem de ativos expostos a terremotos, com dados reais do USGS e uma carteira fictícia. Desenvolvi a coleta, o cálculo geográfico, a atualização da carteira via CDC e o painel para consultar os ativos classificados e acompanhar revisões.
+Consulta de ativos expostos a terremotos, com eventos e ShakeMap do USGS e uma carteira fictícia. O painel reúne mapa, gráficos, listas e comparação entre publicações. A coleta, o cálculo geográfico e a atualização da carteira via CDC mantêm o histórico de cada resultado.
 
 <p>
   <a href="#demonstração"><img src="docs/readme/badges/demo.svg" alt="Demonstração" width="139" height="28"></a>
@@ -14,7 +14,7 @@ Triagem de ativos expostos a terremotos, com dados reais do USGS e uma carteira 
   <a href="https://www.linkedin.com/in/arthur-joanes-6a2967373/"><img src="docs/readme/badges/linkedin.svg" alt="Arthur Joanes no LinkedIn" width="108" height="28"></a>
 </p>
 
-[English](README.en.md)
+[Abrir demonstração](https://arthurjoanes.github.io/quake-exposure/) · [English](README.en.md)
 
 [![CI](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml/badge.svg)](https://github.com/arthurjoanes/quake-exposure/actions/workflows/ci.yaml)
 
@@ -33,10 +33,20 @@ Os critérios selecionam ativos para consulta. Os valores representam a carteira
 
 ## Demonstração
 
-![Painel QuakeExposure com mapa de ativos e resumo por moeda](docs/results/ui-overview.png)
+![Painel QuakeExposure com seleção geográfica e resumo por moeda](docs/results/ui-exploration.png)
+
+A [demonstração online](https://arthurjoanes.github.io/quake-exposure/) abre no navegador, com capturas REPLAY e 10.000 ativos fictícios. Use Selecionar área para delimitar um polígono; a lista passa a mostrar seus ativos e os valores aparecem por moeda. Comparar no mapa mostra as posições anteriores e atuais, com os resumos das duas publicações.
+
+No exemplo inicial, a correção retroativa de `ope-00001` muda sua posição para um ponto com MMI 6,7. A classificação passa de 45 para 46 ativos, e o valor em USD aumenta de US$ 5.147.876,70 para US$ 5.164.008,33. O ativo vale US$ 16.131,63; o total em BRL permanece R$ 864.346,66. O grid é uma captura original; a correção pertence à carteira fictícia.
+
+O snapshot de 11/10/2026, 23:42 em São Paulo, foi calculado pelo domínio a partir das capturas versionadas. A página pública oferece MMI e identifica que o CDC não foi executado nesse exemplo. O ambiente local também oferece raio de 100 km e o estado real do processamento. [Dados e origem](web/public/demo/snapshot.json) · [Guia de exploração](docs/exploracao.md).
 
 <details>
-<summary>Ver gráficos, listas e versão para celular</summary>
+<summary>Ver comparação, operação e capturas anteriores</summary>
+
+![Comparação de posições, classificação e valores entre publicações](docs/results/ui-comparison.png)
+
+![Fluxo da carteira, CDC, cálculo e resultado](docs/results/ui-operations.png)
 
 ![Composição da carteira, valores por moeda e intensidade MMI](docs/results/ui-map-charts.png)
 
@@ -46,7 +56,7 @@ Os critérios selecionam ativos para consulta. Os valores representam a carteira
 
 </details>
 
-Capturas locais de 09/10/2026, com dados REPLAY e carteira fictícia. A demo altera a carteira e exclui um ativo; por isso a captura da Operadora B mostra 4.999 ativos, após uma carga inicial de 5.000 nessa carteira.
+As capturas de gráficos, listas e celular acima são de 09/10/2026. Naquela execução local, a demo excluiu um ativo; a Operadora B ficou com 4.999, após uma carga inicial de 5.000 nessa carteira. O snapshot online usa uma carga própria e uma correção da carteira, sem executar exclusão.
 
 Na [execução registrada em 09/10/2026](docs/results/verify-demo.json), o evento `us7000tiur`, na Operadora B e no critério MMI ≥ 6,0, produziu:
 
@@ -57,11 +67,13 @@ Na [execução registrada em 09/10/2026](docs/results/verify-demo.json), o event
 | Valor dos classificados em BRL | R$ 864.346,66 |
 | Valor dos classificados em USD | US$ 5.147.876,70 |
 
-Para consultar esse cenário no painel:
+Para explorar o painel:
 
 1. Selecione REPLAY, Operadora B, `us7000tiur` e o critério MMI. Confira a composição da carteira, os valores por moeda e a distribuição de intensidade nos gráficos.
 2. Na lista de ativos, filtre os classificados e uma moeda. Busque um ID ou use a ação de localizar no mapa. A lista tem páginas de 50 ou 100 linhas; seus filtros não alteram os totais dos gráficos.
-3. Consulte as revisões e as entradas e saídas entre publicações. A seleção de escopo, carteira, evento e critério fica na URL.
+3. Delimite uma área no mapa. Arraste os vértices para ajustá-la ou use Limpar área para voltar à carteira inteira. O resultado da área fica separado do resumo geral.
+4. Use Comparar no mapa para consultar a publicação anterior, posições e mudanças de classificação. As alterações têm paginação.
+5. Abra Operação para acompanhar carteira, CDC, fila e publicações. Na demonstração pública, essa seção explica o cálculo do snapshot. A seleção de escopo, carteira, evento e critério fica na URL.
 
 O mapa usa ruas e localidades do OpenStreetMap, com agrupamento de pontos ao afastar o zoom. A alternativa offline inclui países e costa Natural Earth em 1:50 milhões. Os tiles online precisam de internet; a carteira vem da API local. Ausência de ShakeMap aparece como indisponibilidade, sem atribuir intensidade zero aos ativos.
 
@@ -92,7 +104,7 @@ Todos os serviços do [Compose](compose.yaml) rodam no mesmo host. A API serve a
 | Carteira histórica | [Origem](src/quakeexposure/portfolio/source.py) e [CDC](src/quakeexposure/cdc/): comandos idempotentes, epoch por tenant e aplicação de transações completas. [ADR](docs/adr/0002-kafka-na-carteira.md). |
 | Publicação consistente | [Worker](src/quakeexposure/exposure/worker.py): fatos, totais e ponteiro atual na mesma transação; uma geração antiga não publica. [ADR](docs/adr/0003-calculo-e-cas.md). |
 | Exclusão e restauração | [Privacidade](src/quakeexposure/privacy/): ledger em volume separado, sanitização de CDC antigo e reaplicação dos bloqueios ao restaurar. [ADR](docs/adr/0004-exclusao-contra-replay.md). |
-| Visualização | [Interface](web/src/): respostas de seleções antigas são descartadas; gráficos validam a publicação; dinheiro permanece inteiro até a formatação. |
+| Exploração e operação | [Interface](web/src/) e [API](src/quakeexposure/api/): consulta regional limitada, seleção por polígono, comparação paginada e estado do processamento. Respostas antigas são descartadas; moedas mantêm valores inteiros. [ADR](docs/adr/0005-exploracao-e-demo.md). |
 
 ## Stack e decisões
 
@@ -139,6 +151,8 @@ A demo percorre cinco passos: replay real, revisão FAULT e duplicata, correçã
 
 O [guia de operação](docs/operacao.md) contém os comandos de coleta ao vivo, correção da carteira, exclusão, backup e restauração. Também explica como registrar a demo com commit e asserções. Grids opcionais de redes diferentes de `us` são baixados separadamente, com conferência de hashes.
 
+Para gerar a demonstração estática a partir das capturas, consulte [Exportar a demonstração](docs/operacao.md#exportar-a-demonstração). A publicação no GitHub Pages usa o [workflow REPLAY](.github/workflows/pages.yaml).
+
 ## Verificação
 
 | Registro | Resultado e alcance |
@@ -148,6 +162,7 @@ O [guia de operação](docs/operacao.md) contém os comandos de coleta ao vivo, 
 | [Bootstrap com volumes vazios](docs/results/m6-bootstrap-cold.md) | 356,907 s até as quatro publicações principais, com imagens em cache e carga concorrente descrita no registro. |
 | [Testes e verificações](docs/progress.md) | Fechamento do M6: 307 testes Python sem skips. Melhoria da interface: 80 testes de frontend, typecheck e build. |
 | [CI de 09/10/2026](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496) | Cinco jobs concluídos no commit `7564a7c`: Python, frontend, PostGIS, integração e segurança. |
+| [Snapshot REPLAY](web/public/demo/snapshot.json) | Origem, seed, hashes e cenário da página pública. [Regressões do exportador](tests/unit/test_public_demo.py) conferem os valores do exemplo. |
 
 Para repetir as verificações:
 
@@ -182,10 +197,12 @@ Os testes usam apenas a rede local. Integrações sobem bancos, Kafka e Debezium
 | Para consultar | Referência |
 | --- | --- |
 | Instalação, operação e recuperação | [Runbook](docs/operacao.md) |
+| Seleção por área, comparação e processamento | [Guia de exploração](docs/exploracao.md) |
 | Escolhas de implementação | [ADRs](docs/adr/) · [Regras do repositório](CONTRIBUTING.md) |
 | Execuções e medições | [Resultados](docs/results/) · [Progresso por milestone](docs/progress.md) |
 | Identidade visual | [Símbolo](web/public/brand/quake-exposure-mark.svg) · [Logotipo](web/public/brand/wordmark.svg) · [Banner](docs/assets/banner.svg) |
 | Manter a apresentação | [Padrão documental](docs/padrao-documentacao.md) · [Fontes e licença dos ícones](docs/stack/README.md) |
+| Referências das melhorias | [Projetos e adaptações](docs/referencias.md) |
 
 <a id="autor-dados-e-licença"></a>
 
