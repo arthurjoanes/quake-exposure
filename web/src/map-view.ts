@@ -580,7 +580,7 @@ export class QuakeMap {
   }
 
   fitComparison(): void {
-    if (!this.comparisonMarkers.length) return;
+    if (!this.comparisonMarkers.length || this.draft !== null) return;
     const first = this.comparisonMarkers[0].asset;
     const anchor = near(first.lon, this.map.getCenter().lng);
     this.map.fitBounds(L.latLngBounds(this.comparisonMarkers.map(({ asset }) => [asset.lat, near(asset.lon, anchor)])), {

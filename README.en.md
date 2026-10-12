@@ -54,6 +54,8 @@ The snapshot from October 11, 2026, 23:42 São Paulo time was calculated by the 
 
 [Charts on mobile](docs/results/ui-mobile-charts.png)
 
+[Area selection on mobile](docs/results/ui-exploration-mobile.png)
+
 </details>
 
 The chart, asset-list and mobile captures above are from October 9, 2026. That local run erased one asset; Operadora B contained 4,999 after an initial load of 5,000. The online snapshot uses a separate load and a portfolio correction, without executing erasure.
