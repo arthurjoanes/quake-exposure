@@ -282,3 +282,7 @@ Reescrita a abertura para apresentar finalidade e implementação. A demonstraç
 O padrão para futuras edições está em [padrao-documentacao.md](padrao-documentacao.md); fontes dos ícones e licença em [stack/README.md](stack/README.md). Conferidos 128 links e âncoras locais dos documentos revisados, 17 SVGs e `git diff --check`. Registros históricos e código da aplicação permanecem sem alterações; as suítes da aplicação não foram repetidas nesta revisão documental.
 
 CI remoto da implementação anterior confirmado: [execução 38004551496](https://github.com/arthurjoanes/quake-exposure/actions/runs/38004551496), commit `7564a7c`, cinco jobs concluídos com sucesso em 09/10/2026. O README identifica essa execução separadamente do badge de estado atual.
+
+## Guia de desenvolvimento (2026-10-11)
+
+As regras de desenvolvimento e manutenção estão em [CONTRIBUTING.md](../CONTRIBUTING.md). Os dois READMEs e o padrão documental apontam para esse guia. Código, testes, capturas e resultados das execuções foram preservados; esta revisão não altera o funcionamento da aplicação.
