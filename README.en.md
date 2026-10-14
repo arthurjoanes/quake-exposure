@@ -135,9 +135,12 @@ All [Compose](compose.yaml) services run on the same host. The API serves the pa
   <img src="docs/stack/python.svg" alt="Python" width="64" height="64">
   <img src="docs/stack/fastapi.svg" alt="FastAPI" width="64" height="64">
   <img src="docs/stack/postgresql.svg" alt="PostgreSQL" width="64" height="64">
+  <img src="docs/stack/postgis.svg" alt="PostGIS" width="64" height="64">
   <img src="docs/stack/apachekafka.svg" alt="Apache Kafka" width="64" height="64">
+  <img src="docs/stack/debezium.svg" alt="Debezium" width="64" height="64">
   <img src="docs/stack/typescript.svg" alt="TypeScript" width="64" height="64">
   <img src="docs/stack/vite.svg" alt="Vite" width="64" height="64">
+  <img src="docs/stack/leaflet.svg" alt="Leaflet" width="64" height="64">
   <img src="docs/stack/docker.svg" alt="Docker" width="64" height="64">
 </p>
 
@@ -239,4 +242,4 @@ Tests only use local networking. Integration tests start real databases, Kafka, 
 
 Code and original brand assets under [MIT](LICENSE). U.S. Geological Survey public-domain data; ComCat DOI 10.5066/F7MS3QZH. Online map © OpenStreetMap contributors; offline Natural Earth basemap via world-atlas. Sources and credits in [NOTICE](NOTICE).
 
-Stack and LinkedIn icons: [Devicon, MIT license](docs/stack/LICENSE.devicon).
+Devicon, Simple Icons and technology name cards: [sources and licenses](docs/stack/README.md).

@@ -135,9 +135,12 @@ Todos os serviços do [Compose](compose.yaml) rodam no mesmo host. A API serve a
   <img src="docs/stack/python.svg" alt="Python" width="64" height="64">
   <img src="docs/stack/fastapi.svg" alt="FastAPI" width="64" height="64">
   <img src="docs/stack/postgresql.svg" alt="PostgreSQL" width="64" height="64">
+  <img src="docs/stack/postgis.svg" alt="PostGIS" width="64" height="64">
   <img src="docs/stack/apachekafka.svg" alt="Apache Kafka" width="64" height="64">
+  <img src="docs/stack/debezium.svg" alt="Debezium" width="64" height="64">
   <img src="docs/stack/typescript.svg" alt="TypeScript" width="64" height="64">
   <img src="docs/stack/vite.svg" alt="Vite" width="64" height="64">
+  <img src="docs/stack/leaflet.svg" alt="Leaflet" width="64" height="64">
   <img src="docs/stack/docker.svg" alt="Docker" width="64" height="64">
 </p>
 
@@ -239,4 +242,4 @@ Os testes usam apenas a rede local. Integrações sobem bancos, Kafka e Debezium
 
 Código e marca própria sob [MIT](LICENSE). Dados do U.S. Geological Survey, domínio público; ComCat DOI 10.5066/F7MS3QZH. Mapa online © OpenStreetMap contributors; base offline Natural Earth via world-atlas. Fontes e créditos em [NOTICE](NOTICE).
 
-Ícones da stack e LinkedIn: [Devicon, licença MIT](docs/stack/LICENSE.devicon).
+Ícones Devicon, Simple Icons e cartões com os nomes das tecnologias: [fontes e licenças](docs/stack/README.md).
