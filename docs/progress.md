@@ -259,7 +259,7 @@ No fechamento local do M6, o repositório remoto ainda não existia. Os commits,
 
 Repositório público criado em `arthurjoanes/quake-exposure`, com descrição, tópicos, commits e tags publicados.
 
-- Marca própria em SVG: símbolo Q com ondas concêntricas, logotipo horizontal e banner de apresentação. A paleta usa azul profundo, verde-petróleo e coral; os mesmos significados de cor aparecem no mapa, nos gráficos e na legenda. Arquivos em `web/public/brand/` e `docs/assets/banner.svg`.
+- Marca própria em SVG: símbolo Q com ondas concêntricas, logotipo horizontal e banner de apresentação. Mapa, gráficos e legenda usam as mesmas cores para cada estado. Arquivos em `web/public/brand/` e `docs/assets/banner.svg`.
 - Mapa online com ruas e localidades do OpenStreetMap; base offline Natural Earth com países e costa em 1:50 milhões. Agrupamento por zoom, cache por publicação, eventos persistentes e desenho em Canvas reduzem a reconstrução de camadas. O mapa continua tratando o antimeridiano.
 - Gráficos de composição dos ativos, valores por moeda, faixas de MMI e entradas/saídas. Os dados são conferidos contra a mesma publicação; ausência de mapa não vira zero. BRL e USD mantêm denominadores próprios e valores inteiros até a formatação.
 - Listas de ativos, revisões e mudanças preservadas. A tabela de ativos desenha 50 ou 100 linhas por página, com busca por ID, filtros de situação e moeda e localização no mapa. A seleção de escopo, carteira, evento e critério fica na URL.

@@ -10,19 +10,11 @@ A marca reúne um Q e duas ondas sísmicas interrompidas. O ponto coral indica o
 
 O símbolo usa uma grade de 64 × 64. Na interface, usar 36 pixels ou mais; no favicon, 16 pixels. Preservar a proporção e uma margem livre de pelo menos um quarto da largura do símbolo. Não acrescentar sombras, gradientes ou contornos.
 
-## Cores
+<a id="cores"></a>
 
-| Cor | Hex | Uso |
-| --- | --- | --- |
-| Marinho | `#14344B` | Marca, títulos e texto principal |
-| Petróleo | `#087F8C` | Ativos elegíveis e ações |
-| Coral | `#BF4B35` | Ativos classificados e epicentro da marca |
-| Ardósia | `#A7B8C0` | Ativos não elegíveis e contornos |
-| Violeta | `#67549A` | Eventos no mapa |
-| Gelo | `#EFF5F6` | Fundo da página e traço da marca |
-| Branco | `#FFFFFF` | Superfícies de leitura |
+## Leitura do mapa
 
-Cor acompanha rótulos, contagens e legendas. Valores de moedas diferentes ficam separados. Coral indica classificação pela regra selecionada; não representa uma estimativa de perda.
+Cor acompanha rótulos, contagens e legendas. Valores de moedas diferentes ficam separados. A classificação segue a regra selecionada e não representa uma estimativa de perda.
 
 ## Tipografia e composição
 
