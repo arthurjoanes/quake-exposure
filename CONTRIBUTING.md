@@ -86,7 +86,7 @@ ShakeMap (`domain/shakemap.py`):
 Grid (`domain/grid.py`):
 
 - Colunas pelo nome em `grid_field`, nunca por posição.
-- Linhas = nlon × nlat; primeira em (lon_min, lat_max); última em (lon_max, lat_min); valores finitos. Senão, `UNSUPPORTED_GRID`.
+- Linhas = nlon × nlat, com valores finitos. Cada célula deve seguir a ordem da grade: longitude crescente dentro da linha e latitude decrescente entre linhas, do canto (lon_min, lat_max) ao canto (lon_max, lat_min). As coordenadas são conferidas com tolerância de 1e-4 grau e longitude equivalente no antimeridiano. Senão, `UNSUPPORTED_GRID`.
 - Passo = (max − min) / (n − 1), não o espaçamento nominal (que vem arredondado). Índice = round((x − min) / passo), só dentro da extensão. A longitude do ativo vai para o domínio do grid antes (antimeridiano).
 - Fora da extensão não há valor. Nada de extrapolar nem de MMI zero.
 

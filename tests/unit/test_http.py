@@ -4,6 +4,7 @@ import socket
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
+from importlib.metadata import version
 
 import httpx
 import pytest
@@ -75,6 +76,12 @@ def test_keeps_query_string_already_in_url() -> None:
         "https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=x&format=geojson"
     )
     assert rec.requests[0].url.params == httpx.QueryParams({"eventid": "x", "format": "geojson"})
+
+
+def test_user_agent_identifies_installed_package() -> None:
+    rec = Recorder(reply())
+    rec.client().get_json(FEED)
+    assert rec.requests[0].headers["user-agent"] == f"quake-exposure/{version('quake-exposure')}"
 
 
 @pytest.mark.parametrize(

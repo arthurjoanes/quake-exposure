@@ -122,16 +122,38 @@ export class PrivacyRecalculation extends Error {
   constructor() { super("Recalculando após exclusão."); }
 }
 
+export const REQUEST_TIMEOUT_MS = 15_000;
+
 /** GET relativo (mesma origem). null em 404; outro erro HTTP vira exceção. */
-export async function get<T>(path: string, params: Record<string, string> = {}): Promise<T | null> {
+export async function get<T>(
+  path: string,
+  params: Record<string, string> = {},
+  signal?: AbortSignal,
+): Promise<T | null> {
+  signal?.throwIfAborted();
   if (import.meta.env.VITE_DEMO === "1") {
     const { demoGet } = await import("./demo-api");
-    return demoGet<T>(path, params);
+    const result = await demoGet<T>(path, params);
+    signal?.throwIfAborted();
+    return result;
   }
   const query = new URLSearchParams(params).toString();
-  const r = await fetch(query ? `${path}?${query}` : path, { headers: { Accept: "application/json" } });
-  if (r.status === 404) return null;
-  if (r.status === 409) throw new PrivacyRecalculation();
-  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
-  return (await r.json()) as T;
+  const controller = new AbortController();
+  const superseded = (): void => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", superseded, { once: true });
+  const timeout = globalThis.setTimeout(() => {
+    controller.abort(new DOMException("Prazo da consulta excedido.", "TimeoutError"));
+  }, REQUEST_TIMEOUT_MS);
+  try {
+    const r = await fetch(query ? `${path}?${query}` : path, {
+      headers: { Accept: "application/json" }, signal: controller.signal,
+    });
+    if (r.status === 404) return null;
+    if (r.status === 409) throw new PrivacyRecalculation();
+    if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+    return (await r.json()) as T;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", superseded);
+  }
 }

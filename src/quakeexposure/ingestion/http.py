@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from importlib.metadata import PackageNotFoundError, version
 
 import httpx
 
@@ -34,7 +35,10 @@ BACKOFF_BASE = 2.0
 BACKOFF_CAP = 60.0
 RETRY_AFTER_CAP = 300.0
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
-USER_AGENT = "quake-exposure/0.0.1"
+try:
+    USER_AGENT = f"quake-exposure/{version('quake-exposure')}"
+except PackageNotFoundError:
+    USER_AGENT = "quake-exposure/development"
 
 
 class FetchError(Exception):

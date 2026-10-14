@@ -1,5 +1,6 @@
 """Cálculo e publicação com PostGIS real: worker, CAS, escopo, fusão, mapa, raio e a API."""
 
+import gzip
 import json
 import uuid
 from collections.abc import Callable, Iterator
@@ -191,6 +192,44 @@ def test_f05_publication_uses_the_preferred_map_and_no_map_has_null_counts(
            WHERE p.mode = 'SHAKEMAP_MMI'"""
     ).fetchone()
     assert row == ("NO_MAP", None, None, 0)
+
+
+def test_worker_does_not_publish_from_a_replaced_grid(
+    harness: Harness, usgs_fixture: Callable[[str], bytes]
+) -> None:
+    h = harness
+    load(h.conn, [asset("t1", "a1", -153.609, 58.802)])
+    product = "urn:usgs-product:ak:shakemap:a2026tuxgky:1791312073169"
+    capture_fault(
+        h.conn,
+        h.blobs,
+        parent_sha256="0" * 64,
+        kind="detail",
+        url="fault://detail",
+        fetched_at=h.clock(),
+        body=usgs_fixture("detail_aka2026tuxgky"),
+    )
+    capture_id = capture_fault(
+        h.conn,
+        h.blobs,
+        parent_sha256="0" * 64,
+        kind="grid",
+        url="fault://grid",
+        fetched_at=h.clock(),
+        product=product,
+        body=grid_xml([-154.0, -153.5, -153.0], [59.0, 58.5], mmi=lambda r, c: 6.5),
+    )
+    project_pending(h.conn, h.blobs, h.clock())
+    rel = h.one("SELECT blob_path FROM control.capture WHERE capture_id = %s", capture_id)
+    suspect = gzip.compress(
+        grid_xml([-154.0, -153.5, -153.0], [59.0, 58.5], mmi=lambda r, c: 1.0), mtime=0
+    )
+    (h.blobs.root / rel).write_bytes(suspect)
+    done = publish(h)
+    assert done["failed"] >= 1
+    assert h.count("serving.current_publication", "mode = 'SHAKEMAP_MMI'") == 0
+    assert h.count("exposure.calculation", "mode = 'SHAKEMAP_MMI'") == 0
+    assert (h.blobs.root / rel).read_bytes() == suspect
 
 
 def test_f11_worker_that_dies_before_commit_leaves_nothing(

@@ -4,7 +4,7 @@
 
 # QuakeExposure
 
-Consulta de ativos expostos a terremotos, com eventos e ShakeMap do USGS e uma carteira fictícia. O painel reúne mapa, gráficos, listas e comparação entre publicações. A coleta, o cálculo geográfico e a atualização da carteira via CDC mantêm o histórico de cada resultado.
+O QuakeExposure permite consultar a exposição de uma carteira fictícia a terremotos, usando eventos e ShakeMap do USGS. O painel reúne mapa, gráficos, listas e comparação entre publicações. A coleta, o cálculo geográfico e a atualização da carteira via CDC mantêm o histórico de cada resultado.
 
 <p>
   <a href="#demonstração"><img src="docs/readme/badges/demo.svg" alt="Demonstração" width="139" height="28"></a>
@@ -63,9 +63,9 @@ Capturas do site público em 12/10/2026, com o snapshot REPLAY descrito acima.
 <details>
 <summary>Capturas anteriores</summary>
 
-[Seleção por área na apresentação anterior](docs/results/ui-exploration.png) · [Comparação anterior](docs/results/ui-comparison.png)
+[Mapa com comparação na apresentação anterior](docs/results/ui-exploration.png) · [Comparação anterior](docs/results/ui-comparison.png)
 
-[Operação na apresentação anterior](docs/results/ui-operations.png)
+[Ativos e detalhes do evento na apresentação anterior](docs/results/ui-operations.png)
 
 [Gráficos na apresentação anterior](docs/results/ui-map-charts.png)
 

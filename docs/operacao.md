@@ -68,6 +68,19 @@ leitura do Connect e do slot a cada dez segundos. Uma leitura com mais de
 30 segundos aparece desatualizada. Fonte HTTP indisponível mantém os eventos
 anteriores e aparece como desatualizada.
 
+Na interface local, cada consulta à API tem prazo de 15 segundos, inclusive
+para receber o corpo. Uma falha conserva o último resultado e oferece
+`Tentar novamente`; o ciclo automático volta após dez segundos. Mudar a
+seleção cancela o ciclo anterior. Esse prazo não é uma promessa de SLA.
+
+Cada leitura de blob confere o SHA-256 do conteúdo descomprimido contra a
+captura registrada. Uma divergência gera `BlobIntegrityError`: a projeção
+coloca a captura em quarentena e o worker não publica o cálculo afetado.
+O arquivo suspeito é preservado, inclusive quando uma nova gravação encontra
+o mesmo caminho. Investigue a origem da alteração e restaure uma cópia cujo
+hash corresponda à captura antes de retomar o processamento; não altere o
+hash registrado para aceitar o conteúdo divergente.
+
 Se o worker cair, as publicações anteriores continuam disponíveis, salvo
 invalidação por exclusão. Reinicie com `docker compose up -d worker` e confira
 os jobs pendentes em `qe status`. Claims abandonados voltam após a lease de

@@ -93,7 +93,6 @@ def parse_grid(data: bytes, *, max_points: int = MAX_POINTS) -> Grid:
         raise UnsupportedGrid(f"{len(rows)} linhas, esperado {nlon * nlat}")
 
     mmi = array("d")
-    first = last = (math.nan, math.nan)
     for n, row in enumerate(rows):
         values = row.split()
         if len(values) != width:
@@ -104,15 +103,13 @@ def parse_grid(data: bytes, *, max_points: int = MAX_POINTS) -> Grid:
             raise UnsupportedGrid(f"linha {n + 1}: {exc}") from exc
         if not (math.isfinite(lon) and math.isfinite(lat) and math.isfinite(value)):
             raise UnsupportedGrid(f"linha {n + 1} com valor não finito")
-        if n == 0:
-            first = (lon, lat)
-        last = (lon, lat)
+        row_index, col_index = divmod(n, nlon)
+        expected_lon = lon_min + col_index * (lon_max - lon_min) / (nlon - 1)
+        expected_lat = lat_max - row_index * (lat_max - lat_min) / (nlat - 1)
+        if not _same_lon(lon, expected_lon) or abs(lat - expected_lat) > COORD_TOLERANCE:
+            raise UnsupportedGrid(f"coordenada inesperada na linha {n + 1}")
         mmi.append(value)
 
-    if not (_same_lon(first[0], lon_min) and abs(first[1] - lat_max) <= COORD_TOLERANCE):
-        raise UnsupportedGrid(f"primeira linha em {first}, esperado ({lon_min}, {lat_max})")
-    if not (_same_lon(last[0], lon_max) and abs(last[1] - lat_min) <= COORD_TOLERANCE):
-        raise UnsupportedGrid(f"última linha em {last}, esperado ({lon_max}, {lat_min})")
     return Grid(lon_min, lat_min, lon_max, lat_max, nlon, nlat, mmi)
 
 

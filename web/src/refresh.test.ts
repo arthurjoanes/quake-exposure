@@ -10,6 +10,22 @@ function deferred<T>() {
 }
 
 describe("LatestRefresh", () => {
+  it("uma nova seleção cancela o transporte anterior sem apresentar sua falha", async () => {
+    const refresh = new LatestRefresh();
+    const failed = vi.fn();
+    let previous!: AbortSignal;
+    const stale = refresh.run((_isCurrent, signal) => {
+      previous = signal;
+      return new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }, failed);
+    await refresh.run(async (_isCurrent, signal) => { expect(signal.aborted).toBe(false); }, failed);
+    await stale;
+    expect(previous.aborted).toBe(true);
+    expect(failed).not.toHaveBeenCalled();
+  });
+
   it.each([new PrivacyRecalculation(), new TypeError("Failed to fetch")])(
     "uma falha antiga não apaga a seleção nova: %s", async (error) => {
       const refresh = new LatestRefresh();

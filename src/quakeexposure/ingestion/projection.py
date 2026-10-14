@@ -114,7 +114,8 @@ def project_capture(conn: Conn, blobs: BlobStore, capture: Capture, now: datetim
             ).fetchone()
             if done and done[0] is not None:
                 return Projected()  # outro processo (backfill ou coletor) projetou antes
-            result = _project(conn, capture, blobs.get(capture.blob_path), now)
+            body = blobs.get(capture.blob_path, expected_sha256=capture.sha256)
+            result = _project(conn, capture, body, now)
             _mark(conn, capture, "OK", now)
         return result
     except Exception as exc:
