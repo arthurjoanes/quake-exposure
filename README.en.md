@@ -4,7 +4,7 @@
 
 # QuakeExposure
 
-Asset exposure inspection using USGS earthquakes and ShakeMap data with a fictional portfolio. The dashboard combines a map, charts, lists, and publication comparison. Collection, geographic calculations, and portfolio updates through CDC preserve each result's history.
+QuakeExposure lets you inspect a fictional portfolio's exposure to earthquakes using USGS events and ShakeMap data. The dashboard combines a map, charts, lists, and publication comparison. Collection, geographic calculations, and portfolio updates through CDC preserve each result's history.
 
 <p>
   <a href="#demo"><img src="docs/readme/badges/demo.en.svg" alt="Demo" width="139" height="28"></a>
@@ -63,9 +63,9 @@ Public-site captures from October 12, 2026, using the REPLAY snapshot described 
 <details>
 <summary>Earlier captures</summary>
 
-[Area selection in the earlier presentation](docs/results/ui-exploration.png) · [Earlier comparison](docs/results/ui-comparison.png)
+[Map with comparison in the earlier presentation](docs/results/ui-exploration.png) · [Earlier comparison](docs/results/ui-comparison.png)
 
-[Operations in the earlier presentation](docs/results/ui-operations.png)
+[Assets and event details in the earlier presentation](docs/results/ui-operations.png)
 
 [Charts in the earlier presentation](docs/results/ui-map-charts.png)
 

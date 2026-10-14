@@ -459,7 +459,7 @@ function paint(pub: CurrentPublication | null, view: View | null, message = ""):
   renderEventPanel();
 }
 
-async function refreshPublication(key: string, isCurrent: () => boolean): Promise<void> {
+async function refreshPublication(key: string, isCurrent: () => boolean, signal: AbortSignal): Promise<void> {
   const { scope, tenant, uid, mode } = selection();
   if (!uid || !tenant) {
     sync.reset();
@@ -471,7 +471,7 @@ async function refreshPublication(key: string, isCurrent: () => boolean): Promis
     earthquake_uid: uid,
     mode,
     scope,
-  });
+  }, signal);
   if (!isCurrent() || key !== selectionKey()) return;
   if (!pub) {
     sync.seen(null);
@@ -481,8 +481,8 @@ async function refreshPublication(key: string, isCurrent: () => boolean): Promis
   if (!sync.seen(pub.publication_id)) return;
   const id = encodeURIComponent(pub.publication_id);
   const [assets, diff] = await Promise.all([
-    get<AssetsResponse>(`/api/publications/${id}/assets`, { tenant }),
-    get<DiffResponse>(`/api/publications/${id}/diff`, { tenant }),
+    get<AssetsResponse>(`/api/publications/${id}/assets`, { tenant }, signal),
+    get<DiffResponse>(`/api/publications/${id}/diff`, { tenant }, signal),
   ]);
   if (!isCurrent() || key !== selectionKey() || !assets || !diff) return;
   const view = build(pub, assets, diff);
@@ -527,13 +527,13 @@ function feedback(message = "", error = false): void {
   document.querySelector(".analysis-view")?.setAttribute("aria-busy", String(Boolean(message) && !error));
 }
 
-async function refreshOperations(isCurrent: () => boolean): Promise<void> {
+async function refreshOperations(isCurrent: () => boolean, signal?: AbortSignal): Promise<void> {
   const tenant = tenantSel.value;
   if (!tenant) return;
   const generation = ++operationsGeneration;
   operationsBox.setAttribute("aria-busy", "true");
   try {
-    const operations = await get<OperationsResponse>("/api/operations", { tenant });
+    const operations = await get<OperationsResponse>("/api/operations", { tenant }, signal);
     if (!isCurrent() || generation !== operationsGeneration || tenant !== tenantSel.value) return;
     operationsBox.innerHTML = operations ? renderOperations(operations, DEMO, demoPipelineExecuted) : "<h2>Operação da carteira</h2><p>Sem informações de processamento para esta carteira.</p>";
   } catch {
@@ -544,10 +544,10 @@ async function refreshOperations(isCurrent: () => boolean): Promise<void> {
   }
 }
 
-async function refreshSources(isCurrent: () => boolean): Promise<void> {
+async function refreshSources(isCurrent: () => boolean, signal: AbortSignal): Promise<void> {
   if (DEMO) return;
   try {
-    const status = await get<ApiStatus>("/api/status");
+    const status = await get<ApiStatus>("/api/status", {}, signal);
     if (isCurrent() && status) renderStale(status);
   } catch {
     if (!isCurrent()) return;
@@ -557,10 +557,10 @@ async function refreshSources(isCurrent: () => boolean): Promise<void> {
 }
 
 async function refresh(): Promise<void> {
-  await refreshes.run(async (isCurrent) => {
+  await refreshes.run(async (isCurrent, signal) => {
     if (!state.shown) feedback("Carregando a análise…");
     if (!tenantSel.options.length) {
-      const tenants = (await get<Tenant[]>("/api/tenants")) ?? [];
+      const tenants = (await get<Tenant[]>("/api/tenants", {}, signal)) ?? [];
       if (!isCurrent()) return;
       tenantSel.replaceChildren(...tenants.map((t) => new Option(t.name, t.tenant_id)));
       const preferred = initialParams.get("tenant");
@@ -568,9 +568,9 @@ async function refresh(): Promise<void> {
     }
     let key = selectionKey();
     const { scope } = selection();
-    void refreshSources(isCurrent);
-    void refreshOperations(isCurrent);
-    const events = await get<QuakeEvent[]>("/api/events", { scope });
+    void refreshSources(isCurrent, signal);
+    void refreshOperations(isCurrent, signal);
+    const events = await get<QuakeEvent[]>("/api/events", { scope }, signal);
     if (!isCurrent() || key !== selectionKey()) return;
     state.events = events ?? [];
     if (initialSelection) {
@@ -593,14 +593,14 @@ async function refresh(): Promise<void> {
     drawEvents();
     if (state.uid) {
       const revisions =
-        (await get<Revision[]>(`/api/events/${encodeURIComponent(state.uid)}/revisions`, { scope })) ?? [];
+        (await get<Revision[]>(`/api/events/${encodeURIComponent(state.uid)}/revisions`, { scope }, signal)) ?? [];
       if (!isCurrent() || key !== selectionKey()) return;
       state.revisions = revisions;
     } else {
       state.revisions = [];
     }
     renderEventPanel();
-    await refreshPublication(key, isCurrent);
+    await refreshPublication(key, isCurrent, signal);
     if (!isCurrent() || key !== selectionKey()) return;
     clock.textContent = DEMO ? `Snapshot · ${demoSnapshotAt ? utc(demoSnapshotAt) : "REPLAY"}` : `Atualizado às ${new Date().toLocaleTimeString("pt-BR")}`;
     clock.classList.remove("error");
@@ -621,10 +621,12 @@ async function refresh(): Promise<void> {
 }
 
 let timer = 0;
+let tickGeneration = 0;
 async function tick(): Promise<void> {
-  await refresh();
+  const generation = ++tickGeneration;
   clearTimeout(timer);
-  if (!DEMO) timer = window.setTimeout(tick, REFRESH_MS);
+  await refresh();
+  if (!DEMO && generation === tickGeneration) timer = window.setTimeout(tick, REFRESH_MS);
 }
 
 function changed(): void {

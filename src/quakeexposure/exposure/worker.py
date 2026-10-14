@@ -183,10 +183,11 @@ def _needs_grid(target: jobs.Target, vector: InputVector) -> bool:
 
 def _load_grid(conn: Conn, blobs: BlobStore, target: jobs.Target) -> Grid:
     row = conn.execute(
-        "SELECT blob_path FROM control.capture WHERE capture_id = %s", (target.grid_capture_id,)
+        "SELECT blob_path, sha256 FROM control.capture WHERE capture_id = %s",
+        (target.grid_capture_id,),
     ).fetchone()
     assert row is not None
-    return parse_grid(blobs.get(row[0]))
+    return parse_grid(blobs.get(row[0], expected_sha256=row[1]))
 
 
 def _exists(conn: Conn, calculation_id: str) -> bool:

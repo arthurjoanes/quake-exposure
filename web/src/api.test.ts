@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { get, PrivacyRecalculation } from "./api";
+import { get, PrivacyRecalculation, REQUEST_TIMEOUT_MS } from "./api";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 describe("GET da API", () => {
   it.each([
@@ -43,7 +46,55 @@ describe("GET da API", () => {
     await expect(get("/api/publications/current", { tenant: "a & b", scope: "REPLAY" }))
       .resolves.toEqual(result);
     expect(fetch).toHaveBeenCalledWith(
-      "/api/publications/current?tenant=a+%26+b&scope=REPLAY", { headers: { Accept: "application/json" } },
+      "/api/publications/current?tenant=a+%26+b&scope=REPLAY",
+      { headers: { Accept: "application/json" }, signal: expect.any(AbortSignal) },
     );
+  });
+
+  it.each(["headers", "body"])("prazo cobre %s pendentes e permite a consulta seguinte", async (stage) => {
+    vi.useFakeTimers();
+    let requestSignal!: AbortSignal;
+    const fetch = vi.fn(async (_url: string, options: RequestInit) => {
+      requestSignal = options.signal as AbortSignal;
+      if (stage === "headers") {
+        return new Promise<Response>((_resolve, reject) => {
+          requestSignal.addEventListener("abort", () => reject(requestSignal.reason), { once: true });
+        });
+      }
+      return new Response(new ReadableStream({
+        start(controller) {
+          requestSignal.addEventListener("abort", () => controller.error(requestSignal.reason), { once: true });
+        },
+      }));
+    });
+    vi.stubGlobal("fetch", fetch);
+    const result = get("/api/events").catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1);
+    expect(requestSignal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toMatchObject({ name: "TimeoutError" });
+    expect(requestSignal.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json([])));
+    await expect(get("/api/events")).resolves.toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("mudança da seleção aborta a consulta antes do prazo", async () => {
+    vi.useFakeTimers();
+    const selection = new AbortController();
+    let requestSignal!: AbortSignal;
+    vi.stubGlobal("fetch", vi.fn((_url: string, options: RequestInit) => {
+      requestSignal = options.signal as AbortSignal;
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal.addEventListener("abort", () => reject(requestSignal.reason), { once: true });
+      });
+    }));
+    const result = get("/api/events", {}, selection.signal).catch((error: unknown) => error);
+    selection.abort();
+    expect(await result).toMatchObject({ name: "AbortError" });
+    expect(requestSignal.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(get("/api/events", {}, selection.signal)).rejects.toMatchObject({ name: "AbortError" });
   });
 });

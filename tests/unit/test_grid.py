@@ -127,6 +127,25 @@ def test_point_limit() -> None:
         parse_grid(data, max_points=11)
 
 
+@pytest.mark.parametrize("change", ["swapped", "duplicate", "shifted"])
+def test_rejects_inconsistent_interior_coordinates(change: str) -> None:
+    text = grid_xml(LONS, LATS).decode()
+    prefix, remaining = text.split("<grid_data>")
+    content, suffix = remaining.split("</grid_data>")
+    rows = [row for row in content.splitlines() if row.strip()]
+    if change == "swapped":
+        rows[4], rows[5] = rows[5], rows[4]
+    elif change == "duplicate":
+        rows[5] = rows[4]
+    else:
+        values = rows[5].split()
+        values[0] = str(float(values[0]) + 0.01)
+        rows[5] = " ".join(values)
+    altered = f"{prefix}<grid_data>\n" + "\n".join(rows) + f"\n</grid_data>{suffix}"
+    with pytest.raises(UnsupportedGrid, match="coordenada inesperada"):
+        parse_grid(altered.encode())
+
+
 @pytest.mark.parametrize(
     "lons",
     [

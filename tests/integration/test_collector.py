@@ -11,7 +11,8 @@ from builders import collection, feature, summary_of
 
 from quakeexposure.ingestion.collector import FEED_URL, fdsn_time
 from quakeexposure.ingestion.http import FetchError, sha256_b64
-from quakeexposure.ingestion.projection import FDSN_QUERY_URL
+from quakeexposure.ingestion.projection import FDSN_QUERY_URL, project_pending
+from quakeexposure.ingestion.replay import capture_fault
 from quakeexposure.status import format_report, report
 
 from .conftest import Harness, ok
@@ -57,6 +58,30 @@ def test_f01_same_feed_twice_adds_nothing(
     assert h.count("quake.event_revision") == revisions
     assert h.count("control.capture") == 1  # sem revisão nova, sem blob: só a linha de log
     assert h.one("SELECT last_new_revisions FROM control.source_status WHERE source = 'feed'") == 0
+
+
+def test_projection_quarantines_blob_with_wrong_capture_hash(harness: Harness) -> None:
+    h = harness
+    capture_id = capture_fault(
+        h.conn,
+        h.blobs,
+        parent_sha256="0" * 64,
+        kind="feed",
+        url="fault://integrity",
+        fetched_at=h.clock(),
+        body=json.dumps(collection(feature("us-original", updated=1000))).encode(),
+    )
+    rel = h.one("SELECT blob_path FROM control.capture WHERE capture_id = %s", capture_id)
+    suspect = gzip.compress(
+        json.dumps(collection(feature("us-replaced", updated=1000))).encode(), mtime=0
+    )
+    (h.blobs.root / rel).write_bytes(suspect)
+    result = project_pending(h.conn, h.blobs, h.clock())
+    assert result.quarantined == 1
+    assert h.count("quake.event_revision") == 0
+    assert h.one("SELECT projection_status FROM control.capture") == "QUARANTINED"
+    assert "BlobIntegrityError" in h.one("SELECT reason FROM control.quarantine")
+    assert (h.blobs.root / rel).read_bytes() == suspect
 
 
 def test_detail_map_and_grid_for_event_in_scope(
