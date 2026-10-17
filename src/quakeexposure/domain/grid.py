@@ -81,10 +81,11 @@ def parse_grid(data: bytes, *, max_points: int = MAX_POINTS) -> Grid:
     fields = {f.attrib.get("name", ""): f.attrib.get("index", "") for f in field_elements}
     width = len(field_elements)
     try:
+        indices = [int(index) - 1 for index in fields.values()]
         i_lon, i_lat, i_mmi = (int(fields[name]) - 1 for name in ("LON", "LAT", "MMI"))
     except (KeyError, ValueError) as exc:
         raise UnsupportedGrid(f"grid_field sem LON, LAT ou MMI: {fields}") from exc
-    if len(fields) != width or not all(0 <= i < width for i in (i_lon, i_lat, i_mmi)):
+    if len(fields) != width or sorted(indices) != list(range(width)):
         raise UnsupportedGrid(f"grid_field inconsistente: {fields}")
 
     rows = (_only(root, "grid_data").text or "").splitlines()
