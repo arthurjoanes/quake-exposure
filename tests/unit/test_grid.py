@@ -127,6 +127,20 @@ def test_point_limit() -> None:
         parse_grid(data, max_points=11)
 
 
+@pytest.mark.parametrize(
+    ("field", "index"),
+    [("MMI", "1"), ("PGA", "1"), ("PGA", "9"), ("PGA", "invalid")],
+    ids=["mmi-aliases-longitude", "unused-duplicate", "unused-out-of-range", "unused-nonnumeric"],
+)
+def test_f14_rejects_ambiguous_column_indices(field: str, index: str) -> None:
+    data = grid_xml(LONS, LATS)
+    original = f'index="{3 if field == "MMI" else 4}" name="{field}"'.encode()
+    data = data.replace(original, f'index="{index}" name="{field}"'.encode())
+
+    with pytest.raises(UnsupportedGrid, match="grid_field"):
+        parse_grid(data)
+
+
 @pytest.mark.parametrize("change", ["swapped", "duplicate", "shifted"])
 def test_rejects_inconsistent_interior_coordinates(change: str) -> None:
     text = grid_xml(LONS, LATS).decode()
