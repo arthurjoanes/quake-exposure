@@ -36,6 +36,13 @@ Banco: `sql/platform/NNNN_*.sql`, aplicadas pelo `qe migrate` (serviço `migrate
 
 Não há Makefile. Comando novo entra como `uv run qe ...` ou `docker compose ...` e é documentado aqui e no README.
 
+### Demonstração no GitHub Pages
+
+Pushes para `main` executam o CI sem publicar a demonstração. Para publicar, execute
+manualmente o workflow `Demo REPLAY`, selecionando a branch `main`, após autorizar essa
+operação. O workflow mantém os testes e o build com `VITE_DEMO=1` antes da publicação;
+execuções disparadas em outras branches não constroem nem publicam o site.
+
 ## Regras do repositório
 
 - Git: commits em inglês, no formato Conventional Commits. Push só com o OK do Arthur.
