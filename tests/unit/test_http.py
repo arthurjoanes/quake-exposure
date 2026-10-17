@@ -90,6 +90,10 @@ def test_user_agent_identifies_installed_package() -> None:
         "https://example.com/feed.geojson",
         "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
         "https://earthquake.usgs.gov.example.com/x",
+        "https://[invalid/feed.geojson",
+        "https://earthquake.usgs.gov:invalid/feed.geojson",
+        "https://earthquake.usgs.gov:8443/feed.geojson",
+        "https://user:password@earthquake.usgs.gov/feed.geojson",
     ],
 )
 def test_rejects_url_outside_allowlist(url: str) -> None:

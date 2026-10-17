@@ -109,7 +109,7 @@ Carteira e publicação (`domain/portfolio.py`, `domain/exposure.py`):
 Código em `ingestion/`: `http.py` (cliente), `collector.py` (agenda e tarefas), `projection.py` (captura para revisões, mapas e grids), `store.py` (SQL), `replay.py` (REPLAY e FAULT), `blobs.py` (gzip endereçado por sha256).
 
 
-- Allowlist `earthquake.usgs.gov`, só HTTPS, TLS verificado, redirect é erro.
+- Allowlist `earthquake.usgs.gov`, só HTTPS na porta 443, sem credenciais na URL; TLS verificado, redirect é erro. URL inválida vira rejeição da coleta, antes da requisição.
 - Timeouts: conexão 3 s, leitura 20 s, FDSN 90 s.
 - Limites em bytes decodificados: 10 MiB para JSON, 100 MiB para grid (o `length` declarado é checado antes), 2 milhões de pontos.
 - Concorrência 2; retry em 429 e 5xx com `Retry-After` ou backoff com jitter.

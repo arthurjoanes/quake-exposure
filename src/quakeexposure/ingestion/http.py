@@ -139,9 +139,17 @@ class UsgsClient:
         self, url: str, params: Mapping[str, str] | None, limit: int, read_timeout: float
     ) -> Fetched:
         # httpx.URL(url, params=None) apaga a query que já vem na URL
-        target = httpx.URL(url).copy_merge_params(params or {})
-        if target.scheme != "https" or target.host not in self._allowed_hosts:
-            raise NotAllowed(f"{target}: fora da allowlist")
+        try:
+            target = httpx.URL(url).copy_merge_params(params or {})
+        except httpx.InvalidURL as exc:
+            raise NotAllowed("URL inválida: fora da allowlist") from exc
+        if (
+            target.scheme != "https"
+            or target.host not in self._allowed_hosts
+            or target.port not in (None, 443)
+            or target.userinfo
+        ):
+            raise NotAllowed("URL fora da allowlist HTTPS do USGS")
         timeout = httpx.Timeout(read_timeout, connect=CONNECT_TIMEOUT)
         for attempt in range(1, MAX_ATTEMPTS + 1):
             fetched_at = self._now()
