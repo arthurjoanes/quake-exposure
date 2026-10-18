@@ -8,6 +8,8 @@ De e Até incluem o dia inteiro em UTC. É possível informar só uma das datas.
 
 Um recorte vazio remove a seleção e os gráficos de exposição. Datas invertidas apresentam uma orientação para corrigir o intervalo. O endereço conserva `from` e `to`, junto dos filtros existentes. Mudar o período também recorta os terremotos no mapa, sem recalcular nem somar publicações.
 
+A revisão no navegador também cobriu o anúncio acessível do período vazio: ele informa exposição indisponível. O destaque dos atalhos acompanha as datas atuais e desaparece quando o intervalo manual não corresponde a nenhum deles.
+
 ## Como ler a cobertura
 
 O gráfico de intensidade destaca a fração de ativos com MMI amostrado. No evento `us7000tiur`, a Operadora B tem 1.972 de 5.000 ativos com amostra elegível (39,4%). Os 3.028 restantes ficam separados; ausência de amostra não significa intensidade zero. Os 46 classificados pertencem a essa mesma publicação, com valores em BRL e USD separados.

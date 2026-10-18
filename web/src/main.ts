@@ -336,11 +336,16 @@ function renderEventOptions(): void {
   eventTo.setAttribute("aria-invalid", String(invalid));
   el("event-period-note").textContent = invalid
     ? "A data inicial deve vir antes da final. Ajuste o período."
-    : `${events.length} de ${state.events.length} eventos no catálogo. Datas em UTC; o período filtra eventos, sem somar exposições entre terremotos.`;
+    : `${events.length} de ${state.events.length} eventos · UTC`;
   const latest = recentEventPeriod(state.events, 1).to;
   el("event-period-reference").textContent = latest
-    ? `Atalhos de 7 e 30 dias terminam em ${latest.split("-").reverse().join("/")} (UTC), data do evento mais recente do catálogo.`
+    ? `Referência dos atalhos: ${latest.split("-").reverse().join("/")} (último evento)`
     : "Sem eventos para definir a referência dos atalhos.";
+  document.querySelectorAll<HTMLButtonElement>("[data-event-days]").forEach(button => {
+    const days = Number(button.dataset.eventDays);
+    const period = days ? recentEventPeriod(state.events, days) : { from: "", to: "" };
+    button.setAttribute("aria-pressed", String(period.from === eventFrom.value && period.to === eventTo.value));
+  });
 }
 
 function drawEvents(): void {
@@ -477,6 +482,9 @@ function paint(pub: CurrentPublication | null, view: View | null, message = ""):
     areaSummary.innerHTML = "";
     clearAreaButton.hidden = true;
     retryRegion.hidden = true;
+    el("analysis-announcement").textContent = !visibleEvents().length
+      ? "Nenhum evento no período selecionado. Exposição indisponível."
+      : message;
     setActionLabel(fitButton, "Carteira", "Ver carteira no mapa");
     setActionLabel(drawAreaButton, "Área", "Selecionar área");
   }

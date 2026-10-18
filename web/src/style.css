@@ -68,6 +68,7 @@ section:empty { display: none; }
 .event-period input[aria-invalid="true"] { border-color: var(--qualifying); }
 .period-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .period-presets button { min-height: 44px; font-size: 12px; }
+.period-presets button[aria-pressed="true"] { background: var(--ink); color: white; border-color: var(--ink); }
 main { max-width: 1780px; padding: 14px 28px 32px; margin: auto; }
 .context-note { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin-bottom: 14px; }
 .context-note .badge { margin-left: 0; }
