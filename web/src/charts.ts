@@ -87,7 +87,7 @@ function composition(data: ChartData): string {
   let left = 0;
   const bars = series.map((entry) => {
     const width = total === 0 ? 0 : (entry.count / total) * 320;
-    const rect = `<rect x="${left}" y="0" width="${width}" height="24" fill="${entry.color}"><title>${entry.label}: ${count(entry.count)}</title></rect>`;
+    const rect = `<rect class="chart-segment" x="${left}" y="0" width="${width}" height="24" fill="${entry.color}"><title>${entry.label}: ${count(entry.count)}</title></rect>`;
     left += width;
     return rect;
   }).join("");
@@ -105,16 +105,19 @@ function composition(data: ChartData): string {
 function mmiHistogram(data: ChartData): string {
   const maximum = Math.max(1, ...data.mmi.map((entry) => entry.count));
   const measured = data.mmi.reduce((sum, entry) => sum + entry.count, 0);
+  const total = measured + data.withoutMmi;
+  const coverage = total ? `${(measured / total * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "sem ativos";
   const bars = data.mmi.map((entry, index) => {
     const x = 10 + index * 53;
     const height = (entry.count / maximum) * 92;
-    return `<g><rect x="${x}" y="${120 - height}" width="35" height="${height}" rx="3" fill="${entry.qualifying ? COLOR.qualifying : COLOR.eligible}"/>` +
+    return `<g><rect class="chart-column" x="${x}" y="${120 - height}" width="35" height="${height}" rx="3" fill="${entry.qualifying ? COLOR.qualifying : COLOR.eligible}"/>` +
       `<text x="${x + 17.5}" y="${112 - height}" text-anchor="middle" fill="#33434c" font-size="11">${count(entry.count)}</text>` +
       `<text x="${x + 17.5}" y="140" text-anchor="middle" fill="#526773" font-size="10">${escape(entry.label)}</text></g>`;
   }).join("");
   const description = data.mmi.map((entry) => `MMI ${entry.label}: ${count(entry.count)} ativos`).join("; ");
   return panel(
     "Intensidade nos ativos",
+    `<div class="chart-number">${coverage}<span class="chart-kicker"> da carteira com MMI amostrado</span></div>` +
     `<p class="chart-kicker">${count(measured)} com MMI · ${count(data.withoutMmi)} sem amostra elegível</p>` +
     `<svg viewBox="0 0 330 150" width="100%" role="img" aria-label="${escape(description)}"><line x1="4" x2="325" y1="120" y2="120" stroke="#dce4e8"/>${bars}</svg>`,
     `${count(measured)} ativos com MMI amostrado; ${count(data.withoutMmi)} sem amostra elegível. MMI ≥ 6,0 classifica. Ausência de MMI não é zero.`,
@@ -147,7 +150,7 @@ function changes(diff: DiffResponse): string {
     const y = 16 + index * 45;
     return `<text x="0" y="${y + 17}" font-size="12" fill="#526773">${entry.label}</text>` +
       `<rect x="66" y="${y}" width="220" height="24" rx="3" fill="#edf1f3"/>` +
-      `<rect x="66" y="${y}" width="${(entry.count / maximum) * 220}" height="24" rx="3" fill="${entry.color}"/>` +
+      `<rect class="chart-bar" x="66" y="${y}" width="${(entry.count / maximum) * 220}" height="24" rx="3" fill="${entry.color}"/>` +
       `<text x="326" y="${y + 17}" text-anchor="end" font-size="12" fill="#33434c">${count(entry.count)}</text>`;
   }).join("");
   const description = `${count(diff.entered.length)} ativos entraram; ${count(diff.left.length)} ativos saíram da classificação`;

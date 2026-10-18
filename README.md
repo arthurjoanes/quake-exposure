@@ -4,7 +4,7 @@
 
 # QuakeExposure
 
-O QuakeExposure permite consultar a exposição de uma carteira fictícia a terremotos, usando eventos e ShakeMap do USGS. O painel reúne mapa, gráficos, listas e comparação entre publicações. A coleta, o cálculo geográfico e a atualização da carteira via CDC mantêm o histórico de cada resultado.
+Desenvolvi o QuakeExposure para consultar quais ativos de uma carteira entram no alcance de um terremoto e como esse resultado muda entre revisões. O mapa usa eventos e ShakeMap do USGS; os ativos e valores são fictícios. Cada resultado conserva a versão do evento, da carteira e da regra usada no cálculo.
 
 <p>
   <a href="#demonstração"><img src="docs/readme/badges/demo.svg" alt="Demonstração" width="139" height="28"></a>
@@ -33,9 +33,11 @@ Os critérios selecionam ativos para consulta. Os valores representam a carteira
 
 ## Demonstração
 
-![Painel QuakeExposure com mapa, filtros e resumo por moeda](docs/results/ui-ux-desktop.jpg)
+![QuakeExposure com período dos terremotos, mapa e valores por moeda](docs/results/product-analysis-desktop.jpg)
 
-A [demonstração online](https://arthurjoanes.github.io/quake-exposure/) abre no navegador, com capturas REPLAY e 10.000 ativos fictícios. Mapa, Gráficos, Ativos e Operação têm acesso direto pela navegação. No celular, os filtros ficam recolhidos. A ação Área delimita um polígono; a lista passa a mostrar seus ativos e os valores aparecem por moeda.
+Captura local de 17/10/2026 sobre o snapshot REPLAY já versionado. [Gráficos e cobertura MMI](docs/results/product-analysis-charts.jpg) · [Celular](docs/results/product-analysis-mobile.jpg) · [Regras dos filtros e validação](docs/results/product-analysis-20261017.md).
+
+A [demonstração online](https://arthurjoanes.github.io/quake-exposure/) abre no navegador, com capturas REPLAY e 10.000 ativos fictícios. No build local desta revisão, o período recorta o catálogo pela data do terremoto em UTC. Os atalhos de 7 e 30 dias terminam no evento mais recente disponível, inclusive em capturas antigas. O cálculo continua sendo de um evento por vez: exposições de terremotos diferentes não são somadas. Mapa, Gráficos, Ativos e Operação têm acesso direto pela navegação. No celular, os filtros ficam recolhidos. A ação Área delimita um polígono; a lista passa a mostrar seus ativos e os valores aparecem por moeda.
 
 Comparar mostra posições anteriores e atuais, resumos e variação por moeda. A comparação considera a carteira inteira; o resultado da área permanece identificado à parte. Ver no mapa enquadra os ativos alterados. Critérios, revisões e operação ficam em controles expansíveis.
 

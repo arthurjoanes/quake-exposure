@@ -18,6 +18,7 @@ import {
 } from "./api";
 import { AssetList } from "./asset-list";
 import { renderCharts } from "./charts";
+import { filterEventPeriod, normalizeDay, recentEventPeriod } from "./event-period";
 import { QuakeMap } from "./map-view";
 import { formatMinor } from "./money";
 import { PublicationSync } from "./publication";
@@ -61,6 +62,8 @@ const el = <T extends HTMLElement = HTMLElement>(id: string): T => {
 const scopeSel = el<HTMLSelectElement>("scope");
 const tenantSel = el<HTMLSelectElement>("tenant");
 const eventSel = el<HTMLSelectElement>("event");
+const eventFrom = el<HTMLInputElement>("event-from");
+const eventTo = el<HTMLInputElement>("event-to");
 const modeSel = el<HTMLSelectElement>("mode");
 const clock = el("clock");
 const scopeNote = el("scope-note");
@@ -89,6 +92,8 @@ const DEMO = import.meta.env.VITE_DEMO === "1";
 let demoSnapshotAt = "";
 let demoPipelineExecuted = true;
 const initialParams = new URLSearchParams(location.search);
+eventFrom.value = normalizeDay(initialParams.get("from") ?? "");
+eventTo.value = normalizeDay(initialParams.get("to") ?? "");
 if (["LIVE", "REPLAY", "FAULT"].includes(initialParams.get("scope") ?? "")) scopeSel.value = initialParams.get("scope")!;
 if (["RADIUS_TRIAGE", "SHAKEMAP_MMI"].includes(initialParams.get("mode") ?? "")) modeSel.value = initialParams.get("mode")!;
 
@@ -289,7 +294,7 @@ const selection = () => ({
   uid: state.uid,
   mode: modeSel.value as Mode,
 });
-const selectionKey = (): string => Object.values(selection()).join("|");
+const selectionKey = (): string => [...Object.values(selection()), eventFrom.value, eventTo.value].join("|");
 function rememberSelection(): void {
   const s = selection();
   const params = new URLSearchParams(location.search);
@@ -298,6 +303,10 @@ function rememberSelection(): void {
   params.set("mode", s.mode);
   if (s.uid) params.set("event", s.uid);
   else params.delete("event");
+  for (const [key, value] of [["from", eventFrom.value], ["to", eventTo.value]]) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
   writeListState(params, assetList.getState());
   writeComparison(params, !comparisonBox.hidden);
   history.replaceState(null, "", `${location.pathname}?${params}${location.hash}`);
@@ -306,10 +315,16 @@ function rememberSelection(): void {
 
 // ---------- eventos ----------
 
+function visibleEvents(): QuakeEvent[] {
+  if (eventFrom.value && eventTo.value && eventFrom.value > eventTo.value) return [];
+  return filterEventPeriod(state.events, eventFrom.value, eventTo.value);
+}
+
 function renderEventOptions(): void {
+  const events = visibleEvents();
   const opts: [string, string][] = [
-    ["", state.events.length ? "escolha um evento" : "nenhum evento neste escopo"],
-    ...state.events.map((e): [string, string] => [e.earthquake_uid, eventLabel(e)]),
+    ["", events.length ? "escolha um evento" : "nenhum evento neste período"],
+    ...events.map((e): [string, string] => [e.earthquake_uid, eventLabel(e)]),
   ];
   const signature = opts.map((o) => o.join("\t")).join("\n");
   if (signature !== eventSignature) {
@@ -317,11 +332,20 @@ function renderEventOptions(): void {
     eventSel.replaceChildren(...opts.map(([value, text]) => new Option(text, value)));
   }
   eventSel.value = state.uid;
+  const invalid = Boolean(eventFrom.value && eventTo.value && eventFrom.value > eventTo.value);
+  eventTo.setAttribute("aria-invalid", String(invalid));
+  el("event-period-note").textContent = invalid
+    ? "A data inicial deve vir antes da final. Ajuste o período."
+    : `${events.length} de ${state.events.length} eventos no catálogo. Datas em UTC; o período filtra eventos, sem somar exposições entre terremotos.`;
+  const latest = recentEventPeriod(state.events, 1).to;
+  el("event-period-reference").textContent = latest
+    ? `Atalhos de 7 e 30 dias terminam em ${latest.split("-").reverse().join("/")} (UTC), data do evento mais recente do catálogo.`
+    : "Sem eventos para definir a referência dos atalhos.";
 }
 
 function drawEvents(): void {
-  map.setEvents(state.events, state.uid);
-  focusButton.disabled = !state.events.some((event) => event.earthquake_uid === state.uid);
+  map.setEvents(visibleEvents(), state.uid);
+  focusButton.disabled = !visibleEvents().some((event) => event.earthquake_uid === state.uid);
 }
 
 function renderEventPanel(): void {
@@ -575,8 +599,9 @@ async function refresh(): Promise<void> {
     state.events = events ?? [];
     if (initialSelection) {
       initialSelection = false;
-      const initialEvent = state.events.find((event) => event.earthquake_uid === state.uid)
-        ?? (scope === "REPLAY" ? state.events.find((event) => event.preferred_id === "us7000tiur") : undefined);
+      const initialEvent = visibleEvents().find((event) => event.earthquake_uid === state.uid)
+        ?? (scope === "REPLAY" ? visibleEvents().find((event) => event.preferred_id === "us7000tiur") : undefined)
+        ?? visibleEvents()[0];
       if (initialEvent) {
         state.uid = initialEvent.earthquake_uid;
         key = selectionKey();
@@ -584,7 +609,7 @@ async function refresh(): Promise<void> {
       }
       rememberSelection();
     }
-    if (state.uid && !state.events.some((e) => e.earthquake_uid === state.uid)) {
+    if (state.uid && !visibleEvents().some((e) => e.earthquake_uid === state.uid)) {
       state.uid = ""; // saiu da lista (outro escopo ou fundido em outro evento)
       changed();
       return;
@@ -661,6 +686,20 @@ scopeSel.addEventListener("change", () => {
 tenantSel.addEventListener("change", changed);
 modeSel.addEventListener("change", changed);
 eventSel.addEventListener("change", () => selectEvent(eventSel.value));
+function changePeriod(): void {
+  const events = visibleEvents();
+  renderEventOptions();
+  selectEvent(events.some(event => event.earthquake_uid === state.uid) ? state.uid : events[0]?.earthquake_uid ?? "");
+}
+eventFrom.addEventListener("change", changePeriod);
+eventTo.addEventListener("change", changePeriod);
+document.querySelectorAll<HTMLButtonElement>("[data-event-days]").forEach(button => button.addEventListener("click", () => {
+  const days = Number(button.dataset.eventDays);
+  const period = days ? recentEventPeriod(state.events, days) : { from: "", to: "" };
+  eventFrom.value = period.from;
+  eventTo.value = period.to;
+  changePeriod();
+}));
 focusButton.addEventListener("click", () => {
   const event = state.events.find((event) => event.earthquake_uid === state.uid);
   if (event) map.focusEvent(event);
